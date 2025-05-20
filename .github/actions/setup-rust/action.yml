@@ -61,14 +61,14 @@ runs:
     #     # Try to start sccache up to 3 times. Sometimes it times out for unknown reasons.
     #     (r=3;while ! sccache --start-server ; do ((--r))||exit;sleep 5;done)
 
-    # # n.b. this action inspects the environment and variables starting with
-    # # `CARGO_` are used as part of the cache key.
-    # # If users of this composite action add additional `CARGO_*` variables after
-    # # this step runs, the cache key used for storing the job outputs will not
-    # # match the cache key used for restoring.
-    # - name: Cached load of cargo registry
-    #   uses: Swatinem/rust-cache@v2.7.8
-    #   with:
-    #     # Only cache the `.cargo` directory; not build artifacts.
-    #     cache-targets: "false"
-    #     cache-provider: "buildjet"
+    # n.b. this action inspects the environment and variables starting with
+    # `CARGO_` are used as part of the cache key.
+    # If users of this composite action add additional `CARGO_*` variables after
+    # this step runs, the cache key used for storing the job outputs will not
+    # match the cache key used for restoring.
+    - name: Cached load of cargo registry
+      uses: Swatinem/rust-cache@v2.7.8
+      with:
+        # Only cache the `.cargo` directory; not build artifacts.
+        cache-targets: "false"
+        cache-provider: "buildjet"
