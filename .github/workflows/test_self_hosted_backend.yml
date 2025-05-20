@@ -15,7 +15,7 @@ jobs:
 
     services:
       backend:
-        image: ghcr.io/ArnoChenFx/convex-backend@${{ inputs.image_digest_x64 }}
+        image: ghcr.io/arnochenfx/convex-backend@${{ inputs.image_digest_x64 }}
         env:
           ACTIONS_USER_TIMEOUT_SECS: "20"
           CONVEX_CLOUD_ORIGIN: "http://127.0.0.1:3210"

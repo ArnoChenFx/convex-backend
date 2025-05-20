@@ -42,7 +42,7 @@ jobs:
           context: .
           file: self-hosted/docker-build/Dockerfile.dashboard
           tags: |
-            ghcr.io/ArnoChenFx/convex-dashboard
+            ghcr.io/arnochenfx/convex-dashboard
           cache-from: |
             type=s3,name=convex-dashboard-${{ matrix.arch }}-${{ github.ref_name }},prefix=buildkit,region=${{ vars.AWS_REGION }},bucket=${{ vars.RUNS_ON_S3_BUCKET_CACHE }}
             type=s3,name=convex-dashboard-${{ matrix.arch }}-${{ github.sha }},prefix=buildkit,region=${{ vars.AWS_REGION }},bucket=${{ vars.RUNS_ON_S3_BUCKET_CACHE }}
