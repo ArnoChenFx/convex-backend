@@ -94,6 +94,12 @@ jobs:
       - name: Install cargo-nextest
         uses: taiki-e/install-action@cargo-nextest
 
+      - name: Install system libraries
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install pkg-config libsodium-dev libssl-dev librocksdb-dev libsnappy-dev
+
       - name: Build rust tests
         run: cargo nextest run --no-run --profile ci
 
