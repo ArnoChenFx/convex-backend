@@ -222,7 +222,7 @@ impl<RT: Runtime> Storage for S3Storage<RT> {
             .create_multipart_upload()
             .bucket(self.bucket.clone())
             .key(&s3_key.0)
-            .server_side_encryption(ServerSideEncryption::Aes256)
+            //.server_side_encryption(ServerSideEncryption::Aes256)
             // Because we're using multipart uploads, we're really specifying the part checksum
             // algorithm here, so it needs to match what we use for each part.
             .checksum_algorithm(ChecksumAlgorithm::Crc32)
@@ -260,7 +260,7 @@ impl<RT: Runtime> Storage for S3Storage<RT> {
             .create_multipart_upload()
             .bucket(self.bucket.clone())
             .key(&s3_key.0)
-            .server_side_encryption(ServerSideEncryption::Aes256)
+            //.server_side_encryption(ServerSideEncryption::Aes256)
             // Because we're using multipart uploads, we're really specifying the part checksum
             // algorithm here, so it needs to match what we use for each part.
             .checksum_algorithm(ChecksumAlgorithm::Crc32)
