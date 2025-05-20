@@ -44,10 +44,18 @@ runs:
         echo "CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse" >> $GITHUB_ENV
         echo "CARGO_NET_GIT_FETCH_WITH_CLI=true" >> $GITHUB_ENV
 
-    # - name: Install sccache
-    #   uses: mozilla-actions/sccache-action@v0.0.9
-    #   with:
-    #     version: "v0.8.0"
+    - name: Install sccache
+      uses: mozilla-actions/sccache-action@v0.0.9
+      with:
+        version: "v0.8.0"
+
+    - name: Debug rustc/sccache
+      shell: bash
+      run: |
+        which rustc
+        rustc -V
+        which sccache
+        sccache -V
 
     # - name: Start sccache
     #   shell: bash
