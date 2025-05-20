@@ -34,7 +34,6 @@ jobs:
     uses: ./.github/workflows/test_self_hosted_backend.yml
     with:
       image_digest_x64: ${{ needs.release_backend.outputs.backend_x64_digest }}
-      image_digest_arm64: ${{ needs.release_backend.outputs.backend_arm64_digest }}
 
   tag_images:
     needs: [release_backend, release_dashboard, test_backend]
@@ -52,27 +51,23 @@ jobs:
       - name: Tag and push backend manifest
         run: |
           docker manifest create ghcr.io/ArnoChenFx/convex-backend:${{ github.sha }} \
-            --amend ghcr.io/ArnoChenFx/convex-backend@${{ needs.release_backend.outputs.backend_x64_digest }} \
-            --amend ghcr.io/ArnoChenFx/convex-backend@${{ needs.release_backend.outputs.backend_arm64_digest }}
+            --amend ghcr.io/ArnoChenFx/convex-backend@${{ needs.release_backend.outputs.backend_x64_digest }}
           docker manifest push ghcr.io/ArnoChenFx/convex-backend:${{ github.sha }}
 
           if [[ "${{ github.event_name == 'workflow_dispatch' && inputs.tag_latest || false }}" == "true" ]]; then
             docker manifest create ghcr.io/ArnoChenFx/convex-backend:latest \
-              --amend ghcr.io/ArnoChenFx/convex-backend@${{ needs.release_backend.outputs.backend_x64_digest }} \
-              --amend ghcr.io/ArnoChenFx/convex-backend@${{ needs.release_backend.outputs.backend_arm64_digest }}
+              --amend ghcr.io/ArnoChenFx/convex-backend@${{ needs.release_backend.outputs.backend_x64_digest }}
             docker manifest push ghcr.io/ArnoChenFx/convex-backend:latest
           fi
 
       - name: Tag and push dashboard manifest
         run: |
           docker manifest create ghcr.io/ArnoChenFx/convex-dashboard:${{ github.sha }} \
-            --amend ghcr.io/ArnoChenFx/convex-dashboard@${{ needs.release_dashboard.outputs.dashboard_x64_digest }} \
-            --amend ghcr.io/ArnoChenFx/convex-dashboard@${{ needs.release_dashboard.outputs.dashboard_arm64_digest }}
+            --amend ghcr.io/ArnoChenFx/convex-dashboard@${{ needs.release_dashboard.outputs.dashboard_x64_digest }}
           docker manifest push ghcr.io/ArnoChenFx/convex-dashboard:${{ github.sha }}
 
           if [[ "${{ github.event_name == 'workflow_dispatch' && inputs.tag_latest || false }}" == "true" ]]; then
             docker manifest create ghcr.io/ArnoChenFx/convex-dashboard:latest \
-              --amend ghcr.io/ArnoChenFx/convex-dashboard@${{ needs.release_dashboard.outputs.dashboard_x64_digest }} \
-              --amend ghcr.io/ArnoChenFx/convex-dashboard@${{ needs.release_dashboard.outputs.dashboard_arm64_digest }}
+              --amend ghcr.io/ArnoChenFx/convex-dashboard@${{ needs.release_dashboard.outputs.dashboard_x64_digest }}
             docker manifest push ghcr.io/ArnoChenFx/convex-dashboard:latest
           fi

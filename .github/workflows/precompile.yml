@@ -8,7 +8,7 @@ on:
 jobs:
   release_dashboard:
     name: Build Convex Dashboard
-    runs-on: [self-hosted, aws, x64, xlarge]
+    runs-on: x64
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -80,17 +80,7 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            os: "['self-hosted', 'aws', 'x64', 'xlarge']"
-          - target: x86_64-apple-darwin
-            # large are on intel
-            os: "'macos-latest-large'"
-          - target: aarch64-apple-darwin
-            # xlarge are on arm
-            os: "'macos-latest-xlarge'"
-          - target: x86_64-pc-windows-msvc
-            os: "'windows-latest'"
-          - target: aarch64-unknown-linux-gnu
-            os: "['self-hosted', 'aws', 'arm64', 'xlarge']"
+            os: "'x64'"
     name: Build Convex Backend
     runs-on: ${{ fromJSON(matrix.os) }}
     steps:

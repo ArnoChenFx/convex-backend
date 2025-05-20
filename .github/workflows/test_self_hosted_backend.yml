@@ -7,11 +7,6 @@ on:
         description: "x64 image digest to test"
         type: string
         required: true
-      image_digest_arm64:
-        description: "arm64 image digest to test"
-        type: string
-        required: true
-
 jobs:
   test_self_hosted_backend:
     name: Test self-hosted backend

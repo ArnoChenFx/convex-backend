@@ -6,9 +6,6 @@ on:
       backend_x64_digest:
         description: "x64 image digest"
         value: ${{ fromJson(jobs.read.outputs.result).digest.backend-x64 }}
-      backend_arm64_digest:
-        description: "arm64 image digest"
-        value: ${{ fromJson(jobs.read.outputs.result).digest.backend-arm64 }}
 
 permissions:
   contents: read
@@ -20,7 +17,7 @@ jobs:
     name: Build backend image
     strategy:
       matrix:
-        arch: [x64, arm64]
+        arch: [x64]
     runs-on: [self-hosted, aws, "${{ matrix.arch }}", xlarge]
     steps:
       - name: Checkout
