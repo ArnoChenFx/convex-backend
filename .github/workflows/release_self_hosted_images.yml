@@ -11,9 +11,6 @@ on:
   push:
     branches:
       - docker
-    paths:
-      - "crates/model/src/migrations.rs"
-
 jobs:
   release_backend:
     uses: ./.github/workflows/release_local_backend.yml
