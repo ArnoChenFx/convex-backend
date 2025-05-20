@@ -94,12 +94,6 @@ jobs:
       - name: Install cargo-nextest
         uses: taiki-e/install-action@cargo-nextest
 
-      # - name: Install Rust nightly
-      #   run: rustup toolchain install nightly-2024-12-16
-
-      # - name: Default to this toolchain
-      #   run: rustup default nightly-2024-12-16
-
       - name: Build rust tests
         run: cargo nextest run --no-run --profile ci
 
