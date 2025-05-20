@@ -2,7 +2,7 @@ name: Build and Test Convex Backend
 
 on:
   push:
-    branches: [main]
+    branches: [docker]
   pull_request:
   workflow_dispatch:
 

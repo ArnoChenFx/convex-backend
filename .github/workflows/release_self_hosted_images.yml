@@ -10,7 +10,7 @@ on:
         required: true
   push:
     branches:
-      - main
+      - docker
     paths:
       - "crates/model/src/migrations.rs"
 
