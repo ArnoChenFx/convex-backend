@@ -16,7 +16,7 @@ env:
 jobs:
   build_and_test:
     name: Build and Test Convex Backend
-    runs-on: [self-hosted, aws, x64, xlarge]
+    runs-on: ubuntu-latest
 
     services:
       # Label used to access service container
