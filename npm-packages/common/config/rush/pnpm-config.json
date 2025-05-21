@@ -89,12 +89,18 @@
    * PNPM documentation: https://pnpm.io/package_json#pnpmoverrides
    */
   "globalOverrides": {
+    "@babel/runtime@7.26.0": "^7.26.10",
+    "@babel/runtime-corejs3@7.26.0": "^7.26.10",
+    "http-proxy-middleware@2.0.8": "^2.0.9",
+    "http-proxy-middleware@2.0.9": "^2.0.9",
     "http-proxy@1.11.1": "^1.18.1",
     "path-to-regexp@^0.1.10": "^0.1.12",
     "path-to-regexp@^3": "^3.3.0",
     "path-to-regexp@^6": "^6.3.0",
+    "prismjs@1.29.0": "^1.30.0",
     "semver@7.3.5": "^7.5.2",
-    "trim@<0.0.3": "^0.0.3"
+    "trim@<0.0.3": "^0.0.3",
+    "undici@6.21.0": "^6.21.1"
     // "example1": "^1.0.0",
     // "example2": "npm:@company/example2@^1.0.0"
   },
@@ -178,7 +184,6 @@
     // "request": "*"
   },
 
-
   /**
    * (THIS FIELD IS MACHINE GENERATED)  The "globalPatchedDependencies" field is updated automatically
    * by the `rush-pnpm patch-commit` command.  It is a dictionary, where the key is an NPM package name
@@ -186,7 +191,7 @@
    *
    * PNPM documentation: https://pnpm.io/package_json#pnpmpatcheddependencies
    */
-  "globalPatchedDependencies": { },
+  "globalPatchedDependencies": {},
 
   /**
    * (USE AT YOUR OWN RISK)  This is a free-form property bag that will be copied into
