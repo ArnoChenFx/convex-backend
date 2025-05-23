@@ -301,6 +301,10 @@ impl<RT: Runtime> IsolateEnvironment<RT> for DatabaseUdfEnvironment<RT> {
     fn system_timeout(&self) -> std::time::Duration {
         *DATABASE_UDF_SYSTEM_TIMEOUT
     }
+
+    fn is_nested_function(&self) -> bool {
+        self.reactor_depth > 0
+    }
 }
 
 impl<RT: Runtime> DatabaseUdfEnvironment<RT> {
@@ -368,6 +372,7 @@ impl<RT: Runtime> DatabaseUdfEnvironment<RT> {
         mut self,
         client_id: String,
         isolate: &mut Isolate<RT>,
+        v8_context: v8::Global<v8::Context>,
         isolate_clean: &mut bool,
         cancellation: BoxFuture<'_, ()>,
         function_started: Option<oneshot::Sender<()>>,
@@ -391,7 +396,7 @@ impl<RT: Runtime> DatabaseUdfEnvironment<RT> {
             _ = tx.send(());
         }
         let mut handle_scope = isolate.handle_scope();
-        let v8_context = v8::Context::new(&mut handle_scope, v8::ContextOptions::default());
+        let v8_context = v8::Local::new(&mut handle_scope, v8_context);
         let mut context_scope = v8::ContextScope::new(&mut handle_scope, v8_context);
 
         let mut isolate_context =
