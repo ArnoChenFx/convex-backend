@@ -935,6 +935,10 @@ pub static FUNRUN_MODULE_CACHE_SIZE: LazyLock<u64> =
 pub static FUNRUN_MODULE_MAX_CONCURRENCY: LazyLock<usize> =
     LazyLock::new(|| env_config("FUNRUN_MODULE_MAX_CONCURRENCY", 100));
 
+/// The maximum size of the module code cache in Funrun in bytes.
+pub static FUNRUN_CODE_CACHE_SIZE: LazyLock<u64> =
+    LazyLock::new(|| env_config("FUNRUN_MODULE_CACHE_SIZE", 500_000_000));
+
 /// The maximum number of fetch clients Funrun would create.
 pub static FUNRUN_FETCH_CLIENT_CACHE_SIZE: LazyLock<usize> =
     LazyLock::new(|| env_config("FUNRUN_FETCH_CLIENT_CACHE_SIZE", 100));
@@ -1279,3 +1283,7 @@ pub static PROPAGATE_UPSTREAM_TRACES: LazyLock<bool> =
 pub static LIST_SNAPSHOT_MAX_AGE_SECS: LazyLock<Duration> = LazyLock::new(|| {
     Duration::from_secs(env_config("LIST_SNAPSHOT_MAX_AGE_SECS", 30 * 24 * 60 * 60))
 });
+
+/// Whether to use the LegacyEncryptor to create tokens
+pub static USE_LEGACY_ENCRYPTOR: LazyLock<bool> =
+    LazyLock::new(|| env_config("USE_LEGACY_ENCRYPTOR", true));
