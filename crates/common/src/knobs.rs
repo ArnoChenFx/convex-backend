@@ -937,7 +937,7 @@ pub static FUNRUN_MODULE_MAX_CONCURRENCY: LazyLock<usize> =
 
 /// The maximum size of the module code cache in Funrun in bytes.
 pub static FUNRUN_CODE_CACHE_SIZE: LazyLock<u64> =
-    LazyLock::new(|| env_config("FUNRUN_MODULE_CACHE_SIZE", 500_000_000));
+    LazyLock::new(|| env_config("FUNRUN_CODE_CACHE_SIZE", 500_000_000));
 
 /// The maximum number of fetch clients Funrun would create.
 pub static FUNRUN_FETCH_CLIENT_CACHE_SIZE: LazyLock<usize> =
@@ -1287,3 +1287,9 @@ pub static LIST_SNAPSHOT_MAX_AGE_SECS: LazyLock<Duration> = LazyLock::new(|| {
 /// Whether to use the LegacyEncryptor to create tokens
 pub static USE_LEGACY_ENCRYPTOR: LazyLock<bool> =
     LazyLock::new(|| env_config("USE_LEGACY_ENCRYPTOR", true));
+
+/// The length of the SubscriptionsWorker's input queue.
+/// If the worker starts to lag then subscriptions will fail once this many
+/// messages are unread.
+pub static SUBSCRIPTIONS_WORKER_QUEUE_SIZE: LazyLock<usize> =
+    LazyLock::new(|| env_config("SUBSCRIPTIONS_WORKER_QUEUE_SIZE", 10000));
