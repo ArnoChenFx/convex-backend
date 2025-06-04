@@ -95,7 +95,7 @@ export type OnMessageResponse = {
 
 const serverDisconnectErrors = {
   // A known error, e.g. during a restart or push
-  InternalServerError: { timeout: 100 },
+  InternalServerError: { timeout: 1000 },
   // ErrorMetadata::overloaded() messages that we realy should back off
   SubscriptionsWorkerFullError: { timeout: 3000 },
   TooManyConcurrentRequests: { timeout: 3000 },
@@ -184,7 +184,7 @@ export class WebSocketManager {
     this.lastCloseReason = "InitialConnect";
 
     // backoff for unknown errors
-    this.defaultInitialBackoff = 100;
+    this.defaultInitialBackoff = 1000;
     this.maxBackoff = 16000;
     this.retries = 0;
 
@@ -588,7 +588,7 @@ export class WebSocketManager {
   private nextBackoff(reason: "client" | ServerDisconnectError): number {
     const initialBackoff: number =
       reason === "client"
-        ? this.defaultInitialBackoff
+        ? 100 // There's no evidence of a server problem, retry quickly
         : reason === "Unknown"
           ? this.defaultInitialBackoff
           : serverDisconnectErrors[reason].timeout;
