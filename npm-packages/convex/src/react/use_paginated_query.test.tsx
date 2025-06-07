@@ -275,15 +275,38 @@ describe("usePaginatedQuery pages", () => {
     resetPaginationId();
   });
 
-  test("loadMore", () => {
+  test.each([
+    {
+      latestPageSize: undefined,
+    },
+    {
+      latestPageSize: "fixed" as const,
+    },
+    {
+      latestPageSize: "grow" as const,
+    },
+  ])("loadMore with latestPageSize $latestPageSize", ({ latestPageSize }) => {
     const { result } = renderHook(
-      () => usePaginatedQuery(query, {}, { initialNumItems: 1 }),
+      () =>
+        usePaginatedQuery(query, {}, { initialNumItems: 1, latestPageSize }),
       { wrapper },
     );
     mockPage(
       {
         numItems: 1,
         cursor: null,
+      },
+      {
+        page: ["item1"],
+        continueCursor: "abc",
+        isDone: false,
+      },
+    );
+    mockPage(
+      {
+        numItems: 1,
+        cursor: null,
+        endCursor: "abc",
       },
       {
         page: ["item1"],

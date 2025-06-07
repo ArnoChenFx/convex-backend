@@ -153,7 +153,13 @@ const completeSplitQuery =
  * @param args - The arguments object for the query function, excluding
  * the `paginationOpts` property. That property is injected by this hook.
  * @param options - An object specifying the `initialNumItems` to be loaded in
- * the first page.
+ * the first page, and the `latestPageSize` to use.
+ * @param options.latestPageSize controls how the latest page (the first page
+ * until another page is loaded) size grows. With "fixed", the page size will
+ * stay at the size specified by `initialNumItems` / `loadMore`. With "grow",
+ * the page size will grow as new items are added within the range of the initial
+ * page. Once multiple pages are loaded, all but the last page will grow, in
+ * order to provide seamless pagination. See the docs for more details.
  * @returns A {@link UsePaginatedQueryResult} that includes the currently loaded
  * items, the status of the pagination, and a `loadMore` function.
  *
@@ -162,7 +168,10 @@ const completeSplitQuery =
 export function usePaginatedQuery<Query extends PaginatedQueryReference>(
   query: Query,
   args: PaginatedQueryArgs<Query> | "skip",
-  options: { initialNumItems: number },
+  options: {
+    initialNumItems: number;
+    latestPageSize?: "grow" | "fixed";
+  },
 ): UsePaginatedQueryReturnType<Query> {
   if (
     typeof options?.initialNumItems !== "number" ||
@@ -238,9 +247,9 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
     Value[],
     undefined | PaginationResult<Value>,
   ] = useMemo(() => {
-    let currResult = undefined;
+    let currResult: PaginationResult<Value> | undefined = undefined;
 
-    const allItems = [];
+    const allItems: Value[] = [];
     for (const pageKey of currState.pageKeys) {
       currResult = resultsObject[pageKey];
       if (currResult === undefined) {
@@ -353,9 +362,33 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
         if (!alreadyLoadingMore) {
           alreadyLoadingMore = true;
           setState((prevState) => {
-            const pageKeys = [...prevState.pageKeys, prevState.nextPageKey];
+            let nextPageKey = prevState.nextPageKey;
             const queries = { ...prevState.queries };
-            queries[prevState.nextPageKey] = {
+            let ongoingSplits = prevState.ongoingSplits;
+            let pageKeys = prevState.pageKeys;
+            if (options.latestPageSize === "fixed") {
+              const lastPageKey = prevState.pageKeys.at(-1)!;
+              const boundLastPageKey = nextPageKey;
+              queries[boundLastPageKey] = {
+                query: prevState.query,
+                args: {
+                  ...prevState.args,
+                  paginationOpts: {
+                    ...(queries[lastPageKey]!.args
+                      .paginationOpts as unknown as PaginationOptions),
+                    endCursor: continueCursor,
+                  },
+                },
+              };
+              nextPageKey++;
+              ongoingSplits = {
+                ...ongoingSplits,
+                [lastPageKey]: [boundLastPageKey, nextPageKey],
+              };
+            } else {
+              pageKeys = [...prevState.pageKeys, nextPageKey];
+            }
+            queries[nextPageKey] = {
               query: prevState.query,
               args: {
                 ...prevState.args,
@@ -366,17 +399,19 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
                 },
               },
             };
+            nextPageKey++;
             return {
               ...prevState,
-              nextPageKey: prevState.nextPageKey + 1,
               pageKeys,
+              nextPageKey,
               queries,
+              ongoingSplits,
             };
           });
         }
       },
     } as const;
-  }, [maybeLastResult, currState.nextPageKey]);
+  }, [maybeLastResult, currState.nextPageKey, options.latestPageSize]);
 
   return {
     results,
