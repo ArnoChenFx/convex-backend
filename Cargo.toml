@@ -45,6 +45,7 @@ csf = "0.1.11"
 cstr = "0.2.11"
 csv-async = "1.2"
 ctrlc = "3.4"
+data-url = "0.3.1"
 deadpool-postgres = "^0.14.0"
 deno_core = "0.347.0"
 deno_core_icudata = "0.74.0"
@@ -57,7 +58,7 @@ elliptic-curve = { version = "0.13", features = [ "std", "pem" ] }
 encoding_rs = "0.8.32"
 enum-iterator = "2.1.0"
 event-listener = "5.3.1"
-fastrace = { version = "0.7", features = [ "enable" ] }
+fastrace = { git = "https://github.com/fast/fastrace", rev = "eacc377a8b3435e04f1d7a68085ce6eedb0d1d4a", version = "0.7", features = [ "enable" ] }
 flate2 = { version = "1", features = [ "zlib-ng" ] }
 flexbuffers = "25"
 float_next_after = "1.0.0"
