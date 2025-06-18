@@ -68,7 +68,7 @@ function Billing({ team }: { team: Team }) {
         <h2>Billing</h2>
       </div>
       <ErrorBoundary fallback={BillingErrorFallback}>
-        <div className="relative min-h-0 flex-1 overflow-x-hidden">
+        <div className="relative mb-6 min-h-0 flex-1 overflow-x-hidden">
           {!isOrbSubLoading && orbSub !== undefined ? (
             <div
               className={cn(
@@ -89,7 +89,7 @@ function Billing({ team }: { team: Team }) {
                 <div className="flex w-full min-w-[20rem] flex-col gap-4">
                   <Sheet className="flex flex-col gap-4 text-sm">
                     <div>
-                      <h3 className="mb-4">Manage Subscription</h3>
+                      <h3 className="mb-4">Plans</h3>
                       Compare all plan features on the{" "}
                       <Link
                         href="https://convex.dev/plans"
@@ -127,7 +127,7 @@ function Billing({ team }: { team: Team }) {
                 inert={!showUpgrade ? "inert" : undefined}
               >
                 {showUpgrade && selectedPlan && (
-                  <Sheet className="mb-6 max-h-full overflow-y-auto scrollbar">
+                  <Sheet className="max-h-full overflow-y-auto scrollbar">
                     <h3 className="mb-4">Upgrade to {selectedPlan.name}</h3>
                     <UpgradePlanContentContainer
                       name={myProfile?.name}

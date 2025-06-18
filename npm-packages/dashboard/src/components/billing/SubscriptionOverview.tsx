@@ -26,6 +26,7 @@ import { Tooltip } from "@ui/Tooltip";
 import { QuestionMarkCircledIcon } from "@radix-ui/react-icons";
 import { Callout } from "@ui/Callout";
 import { formatUsd } from "@common/lib/utils";
+import { planNameMap } from "components/billing/planCards/PlanCard";
 import { BillingContactInputs } from "./BillingContactInputs";
 import { CreateSubscriptionSchema } from "./UpgradePlanContent";
 import { PaymentDetailsForm } from "./PaymentDetailsForm";
@@ -36,7 +37,6 @@ import {
   SpendingLimitsValue,
   useSubmitSpendingLimits,
 } from "./SpendingLimits";
-import { useLaunchDarkly } from "../../hooks/useLaunchDarkly";
 
 export function SubscriptionOverview({
   team,
@@ -51,7 +51,6 @@ export function SubscriptionOverview({
   const resumeSubscription = useResumeSubscription(team.id);
   const [isResuming, setIsResuming] = useState(false);
   const { invoices, isLoading: isLoadingInvoices } = useListInvoices(team.id);
-  const { spendingLimits } = useLaunchDarkly();
 
   if (isLoading || isLoadingInvoices) {
     return <Loading className="h-60 w-full" fullHeight={false} />;
@@ -66,7 +65,12 @@ export function SubscriptionOverview({
           <h3>Subscription</h3>
           <div className="text-sm">
             Current Plan:{" "}
-            <span className="font-semibold">{subscription.plan.name}</span>
+            <span className="font-semibold">
+              {subscription.plan.planType
+                ? planNameMap[subscription.plan.planType] ||
+                  subscription.plan.name
+                : subscription.plan.name}
+            </span>
           </div>
           {typeof subscription.endDate === "number" ? (
             <>
@@ -105,16 +109,12 @@ export function SubscriptionOverview({
             </div>
           ) : null}
           <hr />
-          {spendingLimits && (
-            <>
-              <SpendingLimitsSectionContainer
-                subscription={subscription}
-                team={team}
-                hasAdminPermissions={hasAdminPermissions}
-              />
-              <hr />
-            </>
-          )}
+          <SpendingLimitsSectionContainer
+            subscription={subscription}
+            team={team}
+            hasAdminPermissions={hasAdminPermissions}
+          />
+          <hr />
           <BillingContactForm
             subscription={subscription}
             team={team}
