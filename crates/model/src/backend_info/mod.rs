@@ -94,9 +94,10 @@ impl<'a, RT: Runtime> BackendInfoModel<'a, RT> {
 
         let backend_info = self.get().await?;
         anyhow::ensure!(
+            // Streaming export is enabled by default for local-dev and self-hosted.
             backend_info
                 .map(|bi| bi.streaming_export_enabled)
-                .unwrap_or_default(),
+                .unwrap_or(true),
             ErrorMetadata::forbidden(
                 "StreamingExportNotEnabled",
                 "Streaming export is only available on the Convex Professional plan. See https://www.convex.dev/plans to upgrade.",
@@ -107,9 +108,10 @@ impl<'a, RT: Runtime> BackendInfoModel<'a, RT> {
 
     pub async fn is_log_streaming_allowed(&mut self) -> anyhow::Result<bool> {
         let backend_info = self.get().await?;
+        // Log streaming is allowed on local-deployments.
         Ok(backend_info
             .map(|bi| bi.log_streaming_enabled)
-            .unwrap_or_default())
+            .unwrap_or(true))
     }
 
     pub async fn ensure_log_streaming_allowed(&mut self) -> anyhow::Result<()> {
