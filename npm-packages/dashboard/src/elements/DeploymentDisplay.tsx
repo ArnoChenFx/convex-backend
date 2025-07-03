@@ -8,7 +8,7 @@ import {
 import { useCurrentDeployment, useDeployments } from "api/deployments";
 import { useCurrentTeam, useTeamEntitlements, useTeamMembers } from "api/teams";
 import { useProfile } from "api/profile";
-import { useRememberLastViewedDeployment } from "hooks/useLastViewed";
+import { useRememberLastViewedDeploymentForProject } from "hooks/useLastViewed";
 import { cn } from "@ui/cn";
 import { useRouter } from "next/router";
 import {
@@ -101,7 +101,7 @@ export function DeploymentDisplay({ project }: { project: ProjectDetails }) {
   const deployment = useCurrentDeployment();
   const member = useProfile();
 
-  useRememberLastViewedDeployment(deployment?.name);
+  useRememberLastViewedDeploymentForProject(project.slug, deployment?.name);
 
   const teamMembers = useTeamMembers(project.teamId);
 
@@ -201,7 +201,6 @@ export function DeploymentDisplay({ project }: { project: ProjectDetails }) {
             "text-sm font-medium transition-opacity truncate hover:bg-background-tertiary",
             menuTarget && "bg-background-tertiary border-border-selected",
           )}
-          style={{ height: "100%" }}
           ref={buttonRef}
           tabIndex={0}
           role="button"
@@ -301,7 +300,7 @@ export function DeploymentLabel({
     <div
       ref={containerRef}
       className={cn(
-        "my-2 flex grow rounded-full overflow-visible bg-background-secondary mr-px min-w-24",
+        "my-2 flex grow rounded-full overflow-visible mr-px min-w-24",
         "overflow-auto",
       )}
     >
@@ -310,6 +309,7 @@ export function DeploymentLabel({
         id="select-deployment"
         className={cn(
           "text-sm flex w-full items-center rounded-full gap-2 grow font-medium border-b-0 transition-opacity truncate border hover:opacity-80",
+          "max-w-screen-lg",
           menuTarget && "opacity-80",
           "focus-visible:ring-1 focus-visible:ring-border-selected focus-visible:outline-none",
           getBackgroundColor(deployment.deploymentType),
@@ -355,7 +355,7 @@ export function DeploymentLabel({
                 •
               </span>
               <span
-                className="block max-w-[160px] animate-fadeInFromLoading truncate font-mono font-normal"
+                className="block max-w-60 animate-fadeInFromLoading truncate font-mono font-normal"
                 title={vanityUrl}
               >
                 {vanityUrl}
