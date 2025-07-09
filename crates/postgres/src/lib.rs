@@ -241,10 +241,10 @@ impl PostgresPersistence {
             }
             client
                 .with_retry(async |client| {
-                    client
-                        .batch_execute(INIT_SQL)
-                        .await
-                        .map_err(anyhow::Error::from)
+                    for stmt in INIT_SQL {
+                        client.batch_execute(stmt).await?;
+                    }
+                    Ok(())
                 })
                 .await?;
             if !options.allow_read_only && Self::is_read_only(&client).await? {
@@ -1553,7 +1553,8 @@ const CREATE_SCHEMA_SQL: &str = r"CREATE SCHEMA IF NOT EXISTS @db_name;";
 // This runs (currently) every time a PostgresPersistence is created, so it
 // needs to not only be idempotent but not to affect any already-resident data.
 // IF NOT EXISTS and ON CONFLICT are helpful.
-const INIT_SQL: &str = r#"
+const INIT_SQL: &[&str] = &[
+    r#"
         CREATE TABLE IF NOT EXISTS @db_name.documents (
             id BYTEA NOT NULL,
             ts BIGINT NOT NULL,
@@ -1567,18 +1568,20 @@ const INIT_SQL: &str = r#"
 
             PRIMARY KEY (ts, table_id, id)
         );
+"#,
+    r#"
         CREATE INDEX IF NOT EXISTS documents_by_table_and_id ON @db_name.documents (
             table_id, id, ts
         );
         CREATE INDEX IF NOT EXISTS documents_by_table_ts_and_id ON @db_name.documents (
             table_id, ts, id
         );
-
+"#,
+    r#"
         CREATE TABLE IF NOT EXISTS @db_name.indexes (
             /* ids should be serialized as bytes but we keep it compatible with documents */
             index_id BYTEA NOT NULL,
             ts BIGINT NOT NULL,
-
             /*
             Postgres maximum primary key length is 2730 bytes, which
             is why we split up the key. The first 2500 bytes are stored in key_prefix,
@@ -1601,6 +1604,8 @@ const INIT_SQL: &str = r#"
             document_id BYTEA NULL,
             PRIMARY KEY (index_id, key_prefix, key_sha256, ts)
         );
+"#,
+    r#"
         /* This index with `ts DESC` enables our "loose index scan" queries
          * (i.e. `DISTINCT ON`) to run in both directions, complementing the
          * primary key's ts ASC ordering */
@@ -1610,24 +1615,33 @@ const INIT_SQL: &str = r#"
             key_sha256,
             ts DESC
         );
-
+"#,
+    r#"
         CREATE TABLE IF NOT EXISTS @db_name.leases (
             id BIGINT NOT NULL,
             ts BIGINT NOT NULL,
 
             PRIMARY KEY (id)
         );
-        INSERT INTO @db_name.leases (id, ts) VALUES (1, 0) ON CONFLICT DO NOTHING;
+"#,
+    r#"
         CREATE TABLE IF NOT EXISTS @db_name.read_only (
             id BIGINT NOT NULL,
 
             PRIMARY KEY (id)
         );
+"#,
+    r#"
         CREATE TABLE IF NOT EXISTS @db_name.persistence_globals (
             key TEXT NOT NULL,
             json_value BYTEA NOT NULL,
             PRIMARY KEY (key)
-        );"#;
+            );
+        "#,
+    r#"
+        INSERT INTO @db_name.leases (id, ts) VALUES (1, 0) ON CONFLICT DO NOTHING;
+    "#,
+];
 const TABLES: &[&str] = &[
     "documents",
     "indexes",
@@ -1843,7 +1857,9 @@ const GET_PERSISTENCE_GLOBAL: &str =
 const CHUNK_SIZE: usize = 8;
 const NUM_DOCUMENT_PARAMS: usize = 6;
 const NUM_INDEX_PARAMS: usize = 8;
-const MAX_INSERT_SIZE: usize = 16384;
+// Maximum number of writes within a single transaction. This is the sum of
+// TRANSACTION_MAX_SYSTEM_NUM_WRITES and TRANSACTION_MAX_NUM_USER_WRITES.
+const MAX_INSERT_SIZE: usize = 56000;
 static PIPELINE_QUERIES: LazyLock<usize> = LazyLock::new(|| env_config("PIPELINE_QUERIES", 16));
 
 // Gross: after initialization, the first thing database does is insert metadata
