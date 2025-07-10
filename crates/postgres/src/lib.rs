@@ -46,7 +46,7 @@ use common::{
         InternalId,
         ResolvedDocument,
     },
-    errors::LeaseLostError,
+    errors::lease_lost_error,
     index::{
         IndexEntry,
         IndexKeyBytes,
@@ -75,6 +75,7 @@ use common::{
     query::Order,
     runtime::assert_send,
     sha256::Sha256,
+    shutdown::ShutdownSignal,
     types::{
         DatabaseIndexUpdate,
         DatabaseIndexValue,
@@ -197,17 +198,22 @@ async fn get_current_schema(pool: &ConvexPgPool) -> anyhow::Result<String> {
 }
 
 impl PostgresPersistence {
-    pub async fn new(url: &str, options: PostgresOptions) -> Result<Self, ConnectError> {
+    pub async fn new(
+        url: &str,
+        options: PostgresOptions,
+        lease_lost_shutdown: ShutdownSignal,
+    ) -> Result<Self, ConnectError> {
         let mut config: tokio_postgres::Config =
             url.parse().context("invalid postgres connection url")?;
         config.target_session_attrs(TargetSessionAttrs::ReadWrite);
         let pool = Self::create_pool(config)?;
-        Self::with_pool(pool, options).await
+        Self::with_pool(pool, options, lease_lost_shutdown).await
     }
 
     pub async fn with_pool(
         pool: Arc<ConvexPgPool>,
         options: PostgresOptions,
+        lease_lost_shutdown: ShutdownSignal,
     ) -> Result<Self, ConnectError> {
         if !pool.is_leader_only() {
             return Err(anyhow::anyhow!(
@@ -253,7 +259,7 @@ impl PostgresPersistence {
             Self::check_newly_created(&client).await?
         };
 
-        let lease = Lease::acquire(pool.clone(), &schema).await?;
+        let lease = Lease::acquire(pool.clone(), &schema, lease_lost_shutdown).await?;
         Ok(Self {
             newly_created: newly_created.into(),
             lease,
@@ -1318,7 +1324,7 @@ impl PersistenceReader for PostgresReader {
                 table_name: table.to_owned(),
                 data_bytes: row.try_get::<_, i64>(0)? as u64,
                 index_bytes: row.try_get::<_, i64>(1)? as u64,
-                row_count: 0, // not supported easily
+                row_count: row.try_get::<_, i64>(2)? as u64,
             });
         }
         Ok(stats)
@@ -1341,12 +1347,17 @@ struct Lease {
     pool: Arc<ConvexPgPool>,
     lease_ts: i64,
     schema: SchemaName,
+    lease_lost_shutdown: ShutdownSignal,
 }
 
 impl Lease {
     /// Acquire a lease. Blocks as long as there is another lease holder.
     /// Returns any transient errors encountered.
-    async fn acquire(pool: Arc<ConvexPgPool>, schema: &SchemaName) -> anyhow::Result<Self> {
+    async fn acquire(
+        pool: Arc<ConvexPgPool>,
+        schema: &SchemaName,
+        lease_lost_shutdown: ShutdownSignal,
+    ) -> anyhow::Result<Self> {
         let timer = metrics::lease_acquire_timer();
         let mut client = pool.get_connection("lease_acquire", schema).await?;
         let ts = SystemTime::now()
@@ -1371,6 +1382,7 @@ impl Lease {
             pool,
             lease_ts: ts,
             schema: schema.clone(),
+            lease_lost_shutdown,
         })
     }
 
@@ -1415,7 +1427,8 @@ impl Lease {
             let stmt = tx.prepare_cached(ADVISORY_LEASE_CHECK).await?;
             let rows = tx.query(&stmt, &[&lease_ts]).await?;
             if rows.len() != 1 {
-                return Err(LeaseLostError {}.into());
+                self.lease_lost_shutdown.signal(lease_lost_error());
+                return Err(lease_lost_error());
             }
             timer.finish();
             Ok(())
@@ -1430,7 +1443,8 @@ impl Lease {
         let stmt = tx.prepare_cached(LEASE_PRECOND).await?;
         let rows = tx.query(&stmt, &[&lease_ts]).await?;
         if rows.len() != 1 {
-            return Err(LeaseLostError {}.into());
+            self.lease_lost_shutdown.signal(lease_lost_error());
+            return Err(lease_lost_error());
         }
         timer.finish();
 
@@ -1553,8 +1567,14 @@ const CREATE_SCHEMA_SQL: &str = r"CREATE SCHEMA IF NOT EXISTS @db_name;";
 // This runs (currently) every time a PostgresPersistence is created, so it
 // needs to not only be idempotent but not to affect any already-resident data.
 // IF NOT EXISTS and ON CONFLICT are helpful.
+// Despite the idempotence of IF NOT EXISTS, we still use a conditional check to
+// see if we can avoid running that statement, as it acquires an `ACCESS
+// EXCLUSIVE` lock across the database.
 const INIT_SQL: &[&str] = &[
     r#"
+DO $$
+BEGIN
+    IF to_regclass('@db_name.documents') IS NULL THEN
         CREATE TABLE IF NOT EXISTS @db_name.documents (
             id BYTEA NOT NULL,
             ts BIGINT NOT NULL,
@@ -1568,16 +1588,28 @@ const INIT_SQL: &[&str] = &[
 
             PRIMARY KEY (ts, table_id, id)
         );
+    END IF;
+END $$;
 "#,
     r#"
+DO $$
+BEGIN
+    IF to_regclass('@db_name.documents_by_table_and_id') IS NULL THEN
         CREATE INDEX IF NOT EXISTS documents_by_table_and_id ON @db_name.documents (
             table_id, id, ts
         );
+    END IF;
+    IF to_regclass('@db_name.documents_by_table_ts_and_id') IS NULL THEN
         CREATE INDEX IF NOT EXISTS documents_by_table_ts_and_id ON @db_name.documents (
             table_id, ts, id
         );
+    END IF;
+END $$;
 "#,
     r#"
+DO $$
+BEGIN
+    IF to_regclass('@db_name.indexes') IS NULL THEN
         CREATE TABLE IF NOT EXISTS @db_name.indexes (
             /* ids should be serialized as bytes but we keep it compatible with documents */
             index_id BYTEA NOT NULL,
@@ -1602,42 +1634,61 @@ const INIT_SQL: &[&str] = &[
             table_id BYTEA NULL,
             /* document_id should be populated iff deleted is false. */
             document_id BYTEA NULL,
-            PRIMARY KEY (index_id, key_prefix, key_sha256, ts)
+            PRIMARY KEY (index_id, key_sha256, ts)
         );
+    END IF;
+END $$;
 "#,
     r#"
-        /* This index with `ts DESC` enables our "loose index scan" queries
-         * (i.e. `DISTINCT ON`) to run in both directions, complementing the
-         * primary key's ts ASC ordering */
-        CREATE UNIQUE INDEX IF NOT EXISTS indexes_by_index_id_key_prefix_key_sha256_ts ON @db_name.indexes (
+DO $$
+BEGIN
+    /* We only want this index created for new instances; existing ones already have `indexes_by_index_id_key_prefix_key_sha256_ts` */
+    IF to_regclass('@db_name.indexes_by_index_id_key_prefix_key_sha256_ts') IS NULL AND to_regclass('@db_name.indexes_by_index_id_key_prefix_key_sha256') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS indexes_by_index_id_key_prefix_key_sha256 ON @db_name.indexes (
             index_id,
             key_prefix,
-            key_sha256,
-            ts DESC
+            key_sha256
         );
+    END IF;
+END $$;
 "#,
     r#"
+DO $$
+BEGIN
+    IF to_regclass('@db_name.leases') IS NULL THEN
         CREATE TABLE IF NOT EXISTS @db_name.leases (
             id BIGINT NOT NULL,
             ts BIGINT NOT NULL,
 
             PRIMARY KEY (id)
         );
+    END IF;
+END $$;
 "#,
     r#"
+DO $$
+BEGIN
+    IF to_regclass('@db_name.read_only') IS NULL THEN
         CREATE TABLE IF NOT EXISTS @db_name.read_only (
             id BIGINT NOT NULL,
 
             PRIMARY KEY (id)
         );
+    END IF;
+END $$;
 "#,
     r#"
+DO $$
+BEGIN
+    IF to_regclass('@db_name.persistence_globals') IS NULL THEN
         CREATE TABLE IF NOT EXISTS @db_name.persistence_globals (
             key TEXT NOT NULL,
             json_value BYTEA NOT NULL,
             PRIMARY KEY (key)
             );
-        "#,
+    END IF;
+END $$;
+"#,
     r#"
         INSERT INTO @db_name.leases (id, ts) VALUES (1, 0) ON CONFLICT DO NOTHING;
     "#,
@@ -1762,7 +1813,7 @@ const INSERT_INDEX: &str = r#"INSERT INTO @db_name.indexes
 const INSERT_OVERWRITE_INDEX: &str = r#"INSERT INTO @db_name.indexes
     (index_id, ts, key_prefix, key_suffix, key_sha256, deleted, table_id, document_id)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    ON CONFLICT (index_id, ts, key_prefix, key_sha256) DO UPDATE
+    ON CONFLICT ON CONSTRAINT indexes_pkey DO UPDATE
     SET deleted = excluded.deleted, table_id = excluded.table_id, document_id = excluded.document_id
 "#;
 
@@ -1808,7 +1859,7 @@ const INSERT_OVERWRITE_INDEX_CHUNK: &str = r#"INSERT INTO @db_name.indexes
         ($41, $42, $43, $44, $45, $46, $47, $48),
         ($49, $50, $51, $52, $53, $54, $55, $56),
         ($57, $58, $59, $60, $61, $62, $63, $64)
-        ON CONFLICT (index_id, ts, key_prefix, key_sha256) DO UPDATE
+        ON CONFLICT ON CONSTRAINT indexes_pkey DO UPDATE
         SET deleted = excluded.deleted, table_id = excluded.table_id, document_id = excluded.document_id
 "#;
 
@@ -1965,6 +2016,9 @@ static INDEX_QUERIES: LazyLock<HashMap<(BoundType, BoundType, Order), String>> =
     Set(enable_seqscan OFF)
     Set(enable_bitmapscan OFF)
     Set(plan_cache_mode force_generic_plan)
+    IndexScan(indexes indexes_index_id_key_prefix_key_sha256)
+    NestLoop(a d)
+    IndexScan(d documents_pkey)
 */
 SELECT
     A.index_id,
@@ -2103,8 +2157,10 @@ WHERE
 "#;
 
 // N.B.: tokio-postgres doesn't know how to create regclass values
-const TABLE_SIZE_QUERY: &str =
-    r"SELECT pg_table_size($1::text::regclass), pg_indexes_size($1::text::regclass)";
+const TABLE_SIZE_QUERY: &str = r"SELECT
+pg_table_size($1::text::regclass),
+pg_indexes_size($1::text::regclass),
+(SELECT reltuples::bigint FROM pg_class WHERE oid = $1::text::regclass)";
 
 static MIN_SHA256: LazyLock<Vec<u8>> = LazyLock::new(|| vec![0; 32]);
 static MAX_SHA256: LazyLock<Vec<u8>> = LazyLock::new(|| vec![255; 32]);
