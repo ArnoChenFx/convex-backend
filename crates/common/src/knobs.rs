@@ -126,10 +126,6 @@ pub static DOCUMENT_DELTAS_LIMIT: LazyLock<usize> =
 pub static SNAPSHOT_LIST_LIMIT: LazyLock<usize> =
     LazyLock::new(|| env_config("SNAPSHOT_LIST_LIMIT", 1024));
 
-/// Enables the log streaming worker.
-pub static ENABLE_LOG_STREAMING: LazyLock<bool> =
-    LazyLock::new(|| env_config("ENABLE_LOG_STREAMING", true));
-
 /// The size of the log manager's event receive buffer.
 pub static LOG_MANAGER_EVENT_RECV_BUFFER_SIZE: LazyLock<usize> =
     LazyLock::new(|| env_config("LOG_MANAGER_EVENT_RECV_BUFFER_SIZE", 4096));
@@ -1351,3 +1347,14 @@ pub static SUBSCRIPTIONS_WORKER_QUEUE_SIZE: LazyLock<usize> =
 /// search query fails because indexes are bootstrapping.
 pub static SEARCH_INDEXES_UNAVAILABLE_RETRY_DELAY: LazyLock<Duration> =
     LazyLock::new(|| Duration::from_secs(env_config("SEARCH_INDEXES_UNAVAILABLE_RETRY_DELAY", 3)));
+
+/// The maximum number of subscriptions that can be invalidated immediately. If
+/// there are more, they will be splayed out.
+pub static SUBSCRIPTION_INVALIDATION_DELAY_THRESHOLD: LazyLock<usize> =
+    LazyLock::new(|| env_config("SUBSCRIPTION_INVALIDATION_DELAY_THRESHOLD", 200));
+
+/// How much to splay subscription invalidations. More precisely, this is the
+/// number used to multiply by the number of subscriptions that need to be
+/// invalidated to determine the delay before invalidating them.
+pub static SUBSCRIPTION_INVALIDATION_DELAY_MULTIPLIER: LazyLock<u64> =
+    LazyLock::new(|| env_config("SUBSCRIPTION_INVALIDATION_DELAY_MULTIPLIER", 5));
