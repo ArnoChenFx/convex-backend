@@ -1556,8 +1556,9 @@ export interface components {
             clientId: string;
             codeChallenge?: string | null;
             mode: components["schemas"]["AuthorizeAppMode"];
-            projectId: components["schemas"]["ProjectId"];
+            projectId?: null | components["schemas"]["ProjectId"];
             redirectUri: string;
+            teamId?: null | components["schemas"]["TeamId"];
         };
         /** @enum {string} */
         AuthorizeAppMode: "AuthorizationCode";
@@ -1622,7 +1623,6 @@ export interface components {
         };
         CreateProjectArgs: {
             deploymentType?: null | components["schemas"]["DeploymentType"];
-            partitionId?: null | components["schemas"]["PartitionId"];
             projectName: components["schemas"]["ProjectName"];
             team: components["schemas"]["TeamSlug"];
         };
@@ -1843,8 +1843,6 @@ export interface components {
             plan: components["schemas"]["PlanResponse"];
             status: string;
         };
-        /** Format: int64 */
-        PartitionId: number;
         PaymentMethodResponse: {
             display: string;
             kind: string;
@@ -2184,7 +2182,6 @@ export type MemberResponse = components['schemas']['MemberResponse'];
 export type OptIn = components['schemas']['OptIn'];
 export type OptInToAccept = components['schemas']['OptInToAccept'];
 export type OrbSubscriptionResponse = components['schemas']['OrbSubscriptionResponse'];
-export type PartitionId = components['schemas']['PartitionId'];
 export type PaymentMethodResponse = components['schemas']['PaymentMethodResponse'];
 export type PeriodicBackupConfig = components['schemas']['PeriodicBackupConfig'];
 export type PlanResponse = components['schemas']['PlanResponse'];
