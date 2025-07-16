@@ -41,6 +41,7 @@ use common::{
         ConflictStrategy,
         LatestDocument,
         Persistence,
+        PersistenceIndexEntry,
         PersistenceReader,
         RepeatablePersistence,
         RetentionValidator,
@@ -57,6 +58,7 @@ use common::{
     },
     runtime::{
         new_rate_limiter,
+        try_join,
         RateLimiter,
         Runtime,
     },
@@ -77,7 +79,10 @@ use common::{
 };
 use futures::{
     pin_mut,
-    stream::FusedStream,
+    stream::{
+        self,
+        FusedStream,
+    },
     Future,
     Stream,
     StreamExt,
@@ -96,8 +101,10 @@ use value::{
 
 use crate::{
     metrics::{
+        index_backfill_timer,
         log_index_backfilled,
         log_num_indexes_to_backfill,
+        tablet_index_backfill_timer,
     },
     retention::LeaderRetentionManager,
     Database,
@@ -293,6 +300,7 @@ impl<RT: Runtime> IndexWorker<RT> {
     async fn run(&mut self) -> anyhow::Result<()> {
         tracing::info!("Starting IndexWorker");
         loop {
+            let timer = index_backfill_timer();
             // Get all the documents from the `_index` table.
             let mut tx = self.database.begin(Identity::system()).await?;
             // Index doesn't have `by_creation_time` index, and thus can't be queried via
@@ -342,6 +350,7 @@ impl<RT: Runtime> IndexWorker<RT> {
             }
             drop(index_documents);
             if num_to_backfill > 0 {
+                timer.finish(true);
                 // We backfilled at least one index during this loop iteration.
                 // There's no point in subscribing, as we'd immediately be woken by our own
                 // changes.
@@ -370,6 +379,7 @@ impl<RT: Runtime> IndexWorker<RT> {
         table_mapping: &TableMapping,
         index_documents: BTreeMap<ResolvedDocumentId, ResolvedDocument>,
     ) -> anyhow::Result<()> {
+        let _timer = tablet_index_backfill_timer();
         let index_registry = IndexRegistry::bootstrap(
             table_mapping,
             index_documents.into_values(),
@@ -405,6 +415,7 @@ impl<RT: Runtime> IndexWorker<RT> {
                     self.database.now_ts_for_reads(),
                     &index_registry,
                     index_selector,
+                    1,
                 )
                 .await?;
         }
@@ -645,39 +656,28 @@ impl<RT: Runtime> IndexWriter<RT> {
         snapshot_ts: RepeatableTimestamp,
         index_metadata: &IndexRegistry,
         index_selector: IndexSelector,
+        concurrency: usize,
     ) -> anyhow::Result<()> {
         // Backfill in two steps: first create index entries for all latest documents,
         // then create index entries for all documents in the retention range.
 
-        let (tx, mut rx) = mpsc::unbounded_channel();
-        let handles: Vec<_> = index_selector
-            .iterate_tables()
-            .map(|table_id| {
+        stream::iter(index_selector.iterate_tables().map(Ok))
+            .try_for_each_concurrent(concurrency, |table_id| {
                 let index_metadata = index_metadata.clone();
                 let index_selector = index_selector.clone();
                 let self_ = (*self).clone();
-                let tx = tx.clone();
-                self.runtime
-                    .spawn("index_backfill_table_snapshot", async move {
-                        tokio::select! {
-                            _ = tx.closed() => { /* cancelled */ },
-                            result = self_.backfill_exact_snapshot_of_table(
-                                snapshot_ts,
-                                &index_selector,
-                                &index_metadata,
-                                table_id,
-                            ) => { _ = tx.send(result) },
-                        }
-                    })
+                try_join("index_backfill_table_snapshot", async move {
+                    self_
+                        .backfill_exact_snapshot_of_table(
+                            snapshot_ts,
+                            &index_selector,
+                            &index_metadata,
+                            table_id,
+                        )
+                        .await
+                })
             })
-            .collect();
-        for handle in handles {
-            handle.join().await?;
-        }
-        rx.close();
-        while let Some(result) = rx.recv().await {
-            result?;
-        }
+            .await?;
 
         let mut min_backfilled_ts = snapshot_ts;
 
@@ -752,7 +752,7 @@ impl<RT: Runtime> IndexWriter<RT> {
                     index_updates
                         .into_iter()
                         .filter(|update| index_selector.filter_index_update(update))
-                        .map(|update| (ts, update)),
+                        .map(|update| PersistenceIndexEntry::from_index_update(ts, update)),
                 );
             }
             if !chunk.is_empty() {
@@ -983,7 +983,7 @@ impl<RT: Runtime> IndexWriter<RT> {
                 if !index_selector.filter_index_update(&update) {
                     continue;
                 }
-                chunk.insert((ts, update));
+                chunk.insert(PersistenceIndexEntry::from_index_update(ts, update));
             }
             if !chunk.is_empty() {
                 num_entries_written += chunk.len();
