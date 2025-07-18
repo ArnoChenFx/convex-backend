@@ -264,6 +264,50 @@ pub fn commit_is_stale_timer() -> StatusTimer {
     StatusTimer::new(&DATABASE_COMMIT_IS_STALE_SECONDS)
 }
 
+register_convex_counter!(
+    DATABASE_MISSING_INDEX_KEY_STALENESS_TOTAL,
+    "Number of times a database index was not found in DocumentIndexKeys when determining commit \
+     staleness"
+);
+pub fn log_missing_index_key_staleness() {
+    // This record cases where some index was expected to be present in the
+    // DocumentIndexKeys, but was not.
+    //
+    // This shouldn’t be a problem, because:
+    // - When creating a new index:
+    //   - If the write is committed _before_ the index is created, then
+    //     subscriptions that use this new index will not need to be invalidated
+    //     because of the write (since they were created after the index was
+    //     created, thus after the write was committed)
+    //   - If the write is committed _after_ the index is created, then the entry in
+    //     the write log will be created with a snapshot that includes the index.
+    // - When deleting an index, reaching this means that the query is trying to
+    //   read from an index that has been deleted. Hence, the conflict will be
+    //   detected over the read on the system document.
+
+    log_counter(&DATABASE_MISSING_INDEX_KEY_STALENESS_TOTAL, 1);
+}
+
+register_convex_counter!(
+    DATABASE_MISSING_SEARCH_INDEX_KEY_STALENESS_TOTAL,
+    "Number of times a search index was not found in DocumentIndexKeys when determining commit \
+     staleness"
+);
+pub fn log_missing_search_index_key_staleness() {
+    // See comment in log_missing_index_key_staleness
+    log_counter(&DATABASE_MISSING_SEARCH_INDEX_KEY_STALENESS_TOTAL, 1);
+}
+
+register_convex_counter!(
+    DATABASE_MISSING_INDEX_KEY_SUBSCRIPTIONS_TOTAL,
+    "Number of times a database index was not found in DocumentIndexKeys when updating \
+     subscriptions"
+);
+pub fn log_missing_index_key_subscriptions() {
+    // See comment in log_missing_index_key_staleness
+    log_counter(&DATABASE_MISSING_INDEX_KEY_SUBSCRIPTIONS_TOTAL, 1);
+}
+
 register_convex_histogram!(
     DATABASE_COMMIT_PREPARE_WRITES_SECONDS,
     "Time to prepare writes",
@@ -305,6 +349,14 @@ register_convex_histogram!(
 );
 pub fn write_log_append_timer() -> Timer<VMHistogram> {
     Timer::new(&DATABASE_APPLY_DOCUMENT_STORE_APPEND_SECONDS)
+}
+
+register_convex_histogram!(
+    DATABASE_PENDING_WRITES_TO_WRITE_LOG_SECONDS,
+    "Time to convert writes from PendingWrites to WriteLog"
+);
+pub fn pending_writes_to_write_log_timer() -> Timer<VMHistogram> {
+    Timer::new(&DATABASE_PENDING_WRITES_TO_WRITE_LOG_SECONDS)
 }
 
 register_convex_histogram!(
@@ -1083,6 +1135,14 @@ pub fn subscriptions_log_iterate_timer() -> Timer<VMHistogram> {
 }
 
 register_convex_histogram!(
+    SUBSCRIPTION_PROCESS_WRITE_LOG_ENTRY_SECONDS,
+    "Time to process one write log entry when advancing subscriptions",
+);
+pub fn subscription_process_write_log_entry_timer() -> Timer<VMHistogram> {
+    Timer::new(&SUBSCRIPTION_PROCESS_WRITE_LOG_ENTRY_SECONDS)
+}
+
+register_convex_histogram!(
     SUBSCRIPTION_LOG_INVALIDATE_SECONDS,
     "Time to invalidate segsstiptions when edvancing rh_ log",
 );
@@ -1098,18 +1158,18 @@ pub fn subscriptions_log_enforce_retention_timer() -> Timer<VMHistogram> {
     Timer::new(&SUBSCRIPTION_LOG_ENFORCE_RETENTION_SECONDS)
 }
 
-register_convex_counter!(
-    SUBSCRIPTION_LOG_ITERATE_TOTAL,
-    "Total number of entries in the write log when advancing subscriptions",
+register_convex_histogram!(
+    SUBSCRIPTION_LOG_PROCESSED_COMMITS,
+    "Total number of commits in the write log processed during one advance_log",
 );
-pub fn log_subscriptions_log_length(log_len: usize) {
-    log_counter(&SUBSCRIPTION_LOG_ITERATE_TOTAL, log_len as u64);
+pub fn log_subscriptions_log_processed_commits(log_len: usize) {
+    log_distribution(&SUBSCRIPTION_LOG_PROCESSED_COMMITS, log_len as f64);
 }
 
-register_convex_counter!(
-    SUBSCRIPTION_LOG_WRITES,
-    "Number of writes in the write log when advancing subscriptions",
+register_convex_histogram!(
+    SUBSCRIPTION_LOG_PROCESSED_WRITES,
+    "Total number of writes in the write log processed during one advance_log",
 );
-pub fn log_subscriptions_log_writes(num_writes: usize) {
-    log_counter(&SUBSCRIPTION_LOG_WRITES, num_writes as u64);
+pub fn log_subscriptions_log_processed_writes(num_writes: usize) {
+    log_distribution(&SUBSCRIPTION_LOG_PROCESSED_WRITES, num_writes as f64);
 }
