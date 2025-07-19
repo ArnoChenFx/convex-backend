@@ -178,6 +178,26 @@ export function DataContent({
   });
   const { popupEl } = popupState;
 
+  // Handle query parameter to open schema popup
+  useEffect(() => {
+    if (router.query.showSchemaAndIndexes === "true" && !popupState.popup) {
+      popupState.setPopup({ type: "viewSchema", tableName });
+    }
+    const isSchemaPopupOpen = popupState.popup?.type === "viewSchema";
+    const hasSchemaParam = router.query.showSchemaAndIndexes === "true";
+    if (isSchemaPopupOpen && !hasSchemaParam) {
+      // Schema popup opened, add query param
+      void router.push(
+        {
+          pathname: router.pathname,
+          query: { ...router.query, showSchemaAndIndexes: "true" },
+        },
+        undefined,
+        { shallow: true },
+      );
+    }
+  }, [router.query.showSchemaAndIndexes, router, popupState, tableName]);
+
   const selectedDocumentId = rowsThatAreSelected.values().next().value;
   const selectedDocument = data.find((row) => row._id === selectedDocumentId);
   const defaultDocument = useDefaultDocument(tableName);
@@ -226,7 +246,7 @@ export function DataContent({
           isLoadingMore={isLoading && !isPaused}
         />
 
-        <div className="flex h-full max-h-full flex-col overflow-y-hidden rounded-sm">
+        <div className="flex h-full max-h-full flex-col overflow-y-hidden rounded-lg">
           {numRowsInTable !== undefined && numRowsInTable > 0 && (
             <DataFilters
               tableName={tableName}
@@ -249,7 +269,7 @@ export function DataContent({
 
           <LoadingTransition
             loadingState={
-              <div className="flex h-full flex-col items-center justify-center gap-8 rounded-sm border bg-background-secondary">
+              <div className="flex h-full flex-col items-center justify-center gap-8 rounded-lg border bg-background-secondary">
                 <LoadingLogo />
               </div>
             }

@@ -54,8 +54,7 @@ export function ApplicationsLayout({ team }: { team: Team }) {
   );
 
   return (
-    <div className="flex flex-col">
-      <h2 className="mb-4">Applications</h2>
+    <div className="flex min-w-fit flex-col">
       <HeadlessTab.Group
         selectedIndex={selectedIndex}
         onChange={(index) => {
@@ -67,9 +66,12 @@ export function ApplicationsLayout({ team }: { team: Team }) {
           }
         }}
       >
-        <div className="mb-4 flex gap-2">
-          <Tab>Authorized Applications</Tab>
-          <Tab>Your OAuth Applications</Tab>
+        <div className="sticky top-0 z-10 bg-background-primary">
+          <h2 className="mb-4">Applications</h2>
+          <div className="mb-4 flex gap-2">
+            <Tab>Authorized Applications</Tab>
+            <Tab>Your OAuth Applications</Tab>
+          </div>
         </div>
         <HeadlessTab.Panels>
           <HeadlessTab.Panel

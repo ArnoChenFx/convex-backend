@@ -19,6 +19,7 @@ import {
   useUpdateOauthApp,
   useRegisterOauthApp,
   useDeleteOauthApp,
+  useRegenerateOauthClientSecret,
 } from "api/oauth";
 import { Modal } from "@ui/Modal";
 import { Formik } from "formik";
@@ -34,6 +35,7 @@ import { captureException, captureMessage } from "@sentry/nextjs";
 import { useAuth0 } from "hooks/useAuth0";
 import { useProfile } from "api/profile";
 import Link from "next/link";
+import { TimestampDistance } from "@common/elements/TimestampDistance";
 
 // Utility function to validate URLs without side effects
 function isValidOauthRedirectUri(uri: string): boolean {
@@ -328,7 +330,7 @@ function VerificationRequestForm({
           <div className="rounded border bg-blue-50 p-3 dark:bg-blue-900/20">
             <p className="text-sm text-content-secondary">
               <strong>Note:</strong> The Convex team will review your request
-              and respond via to{" "}
+              and respond to you at{" "}
               <span className="font-mono text-content-primary">
                 {userEmail || "your email"}
               </span>
@@ -409,9 +411,7 @@ export function OauthApps({ teamId }: { teamId: number }) {
           />
         </Modal>
       )}
-      <LoadingTransition
-        loadingProps={{ fullHeight: false, className: "h-14 w-full" }}
-      >
+      <LoadingTransition loadingProps={{ className: "w-[28.125rem] h-80" }}>
         {isLoading ? null : oauthApps && oauthApps.length ? (
           <div className="flex flex-col gap-4">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
@@ -421,6 +421,12 @@ export function OauthApps({ teamId }: { teamId: number }) {
               <Button
                 size="xs"
                 icon={<PlusIcon />}
+                disabled={!isAdmin}
+                tip={
+                  !isAdmin
+                    ? "Only team admins can create OAuth apps."
+                    : undefined
+                }
                 onClick={() => setCreateModalOpen(true)}
               >
                 Create Application
@@ -510,6 +516,10 @@ function OauthAppListItem({
   const [editLoading, setEditLoading] = useState(false);
   const updateOauthApp = useUpdateOauthApp(teamId, app.clientId);
   const deleteOauthApp = useDeleteOauthApp(teamId, app.clientId);
+  const regenerateOauthClientSecret = useRegenerateOauthClientSecret(
+    teamId,
+    app.clientId,
+  );
   // Local state for delete confirmation
   const [showDelete, setShowDelete] = useState(false);
   const [deleteError, setDeleteError] = useState("");
@@ -520,6 +530,10 @@ function OauthAppListItem({
   const [verificationModalOpen, setVerificationModalOpen] = useState(false);
   const [verificationError, setVerificationError] = useState("");
   const [verificationLoading, setVerificationLoading] = useState(false);
+
+  // Local state for regenerate secret confirmation
+  const [showRegenerateSecret, setShowRegenerateSecret] = useState(false);
+  const [regenerateSecretError, setRegenerateSecretError] = useState("");
 
   return (
     <div className="scrollbar flex w-full flex-col gap-2 overflow-x-auto rounded border bg-background-secondary p-3">
@@ -546,40 +560,66 @@ function OauthAppListItem({
             </div>
           </Tooltip>
         </div>
-        <Menu
-          placement="bottom-start"
-          buttonProps={{
-            variant: "neutral",
-            icon: <DotsVerticalIcon />,
-            "aria-label": "App options",
-            size: "xs",
-          }}
-        >
-          {!app.verified ? (
-            <MenuItem action={() => setVerificationModalOpen(true)}>
-              Request Verification
+        <div className="flex items-center gap-2">
+          <TimestampDistance date={new Date(app.createTime)} prefix="Created" />
+          <Menu
+            placement="bottom-start"
+            buttonProps={{
+              variant: "neutral",
+              icon: <DotsVerticalIcon />,
+              "aria-label": "App options",
+              size: "xs",
+            }}
+          >
+            {!app.verified ? (
+              <MenuItem
+                action={() => setVerificationModalOpen(true)}
+                disabled={!isAdmin}
+                tip={
+                  !isAdmin
+                    ? "Only team admins can request verification."
+                    : undefined
+                }
+                tipSide="right"
+              >
+                Request Verification
+              </MenuItem>
+            ) : null}
+            <MenuItem
+              action={() => setEditModalOpen(true)}
+              disabled={!isAdmin}
+              tip={
+                !isAdmin ? "Only team admins can edit OAuth apps." : undefined
+              }
+              tipSide="right"
+            >
+              Edit Application
             </MenuItem>
-          ) : null}
-          <MenuItem
-            action={() => setEditModalOpen(true)}
-            disabled={!isAdmin}
-            tip={!isAdmin ? "Only team admins can edit OAuth apps." : undefined}
-            tipSide="right"
-          >
-            Edit Application
-          </MenuItem>
-          <MenuItem
-            action={() => setShowDelete(true)}
-            variant="danger"
-            disabled={!isAdmin}
-            tip={
-              !isAdmin ? "Only team admins can delete OAuth apps." : undefined
-            }
-            tipSide="right"
-          >
-            Delete Application
-          </MenuItem>
-        </Menu>
+            <MenuItem
+              action={() => setShowRegenerateSecret(true)}
+              disabled={!isAdmin}
+              tip={
+                !isAdmin
+                  ? "Only team admins can regenerate the client secret."
+                  : undefined
+              }
+              tipSide="right"
+            >
+              Regenerate Client Secret
+            </MenuItem>
+            <MenuItem
+              action={() => setShowDelete(true)}
+              variant="danger"
+              disabled={!isAdmin}
+              tip={
+                !isAdmin ? "Only team admins can delete OAuth apps." : undefined
+              }
+              tipSide="right"
+            >
+              Delete Application
+            </MenuItem>
+          </Menu>
+        </div>
       </div>
       <div className="flex flex-wrap gap-2">
         <div className="text-xs break-all">
@@ -691,6 +731,26 @@ function OauthAppListItem({
               setShowDelete(false);
             } catch (err: any) {
               setDeleteError(err?.message || "Failed to delete app");
+            }
+          }}
+        />
+      )}
+      {showRegenerateSecret && (
+        <ConfirmationDialog
+          dialogTitle="Regenerate Client Secret"
+          dialogBody="Regenerating the client secret will immediately invalidate the old client secret."
+          validationText={app.appName}
+          confirmText="Regenerate"
+          error={regenerateSecretError}
+          onClose={() => setShowRegenerateSecret(false)}
+          onConfirm={async () => {
+            try {
+              await regenerateOauthClientSecret();
+              setShowRegenerateSecret(false);
+            } catch (err: any) {
+              setRegenerateSecretError(
+                err?.message || "Failed to regenerate client secret",
+              );
             }
           }}
         />
