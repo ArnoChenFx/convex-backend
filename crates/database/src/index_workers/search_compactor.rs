@@ -86,7 +86,10 @@ impl<RT: Runtime, T: SearchIndex> SearchIndexCompactor<RT, T> {
         let (to_build, token) = self.needs_compaction().await?;
         let num_to_build = to_build.len();
         if num_to_build > 0 {
-            tracing::info!("{num_to_build} {:?} indexes to build", Self::search_type());
+            tracing::info!(
+                "SearchIndexCompactor has {num_to_build} {:?} indexes to build",
+                Self::search_type()
+            );
         }
 
         for job in to_build {
@@ -98,7 +101,10 @@ impl<RT: Runtime, T: SearchIndex> SearchIndexCompactor<RT, T> {
         }
 
         if num_to_build > 0 {
-            tracing::info!("built {num_to_build} {:?} indexes", Self::search_type());
+            tracing::info!(
+                "SearchIndexCompactor built {num_to_build} {:?} indexes",
+                Self::search_type()
+            );
         }
 
         Ok((metrics, token))
