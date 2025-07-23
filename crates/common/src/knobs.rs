@@ -499,7 +499,10 @@ pub static SEARCH_INDEX_WORKER_PAGES_PER_SECOND: LazyLock<NonZeroU32> = LazyLock
 /// index's timestamp up-to-date if its table hasn't had any writes. This isn't
 /// perfect since ideally we'd bound the number and total size of log entries
 /// read for bootstrapping, but it's good enough until we have better commit
-/// statistics that aren't reset at restart.
+/// statistics that aren't reset at restart. It's still expensive to walk the
+/// DocumentRevisionStream to build new segments, so this value needs to be low
+/// enough to not block the search index flushers for too long, or else writes
+/// will start failing. This is why we set this value lower for pro users (10m).
 pub static DATABASE_WORKERS_MAX_CHECKPOINT_AGE: LazyLock<Duration> =
     LazyLock::new(|| Duration::from_secs(env_config("DATABASE_WORKERS_MAX_CHECKPOINT_AGE", 3600)));
 
@@ -1176,6 +1179,9 @@ pub static DATABASE_WORKERS_MIN_COMMITS: LazyLock<usize> =
 /// [`DATABASE_WORKERS_MAX_CHECKPOINT_AGE`] seconds even if nothing has changed.
 /// However, to prevent all instances from checkpointing at the same time, we'll
 /// add a jitter of up to ±TABLE_SUMMARY_AGE_JITTER_SECONDS.
+///
+/// Note: the configured value is capped at
+/// `DATABASE_WORKERS_MAX_CHECKPOINT_AGE/2`.
 pub static TABLE_SUMMARY_AGE_JITTER_SECONDS: LazyLock<f32> =
     LazyLock::new(|| env_config("TABLE_SUMMARY_AGE_JITTER_SECONDS", 900.0));
 

@@ -74,6 +74,7 @@ use crate::{
             SearchIndexWriteResult,
         },
         BuildReason,
+        FlusherType,
         MultiSegmentBackfillResult,
     },
     metrics::{
@@ -95,6 +96,7 @@ pub struct SearchFlusher<RT: Runtime, T: SearchIndex> {
     params: Params<RT, T>,
     writer: SearchIndexMetadataWriter<RT, T>,
     _config: PhantomData<T>,
+    flusher_type: FlusherType,
 }
 
 impl<RT: Runtime, T: SearchIndex> Deref for SearchFlusher<RT, T> {
@@ -144,6 +146,7 @@ impl<RT: Runtime, T: SearchIndex + 'static> SearchFlusher<RT, T> {
         limits: SearchIndexLimits,
         writer: SearchIndexMetadataWriter<RT, T>,
         build_args: T::BuildIndexArgs,
+        flusher_type: FlusherType,
     ) -> Self {
         Self {
             params: Params {
@@ -156,6 +159,7 @@ impl<RT: Runtime, T: SearchIndex + 'static> SearchFlusher<RT, T> {
             },
             writer,
             _config: PhantomData,
+            flusher_type,
         }
     }
 
@@ -170,7 +174,7 @@ impl<RT: Runtime, T: SearchIndex + 'static> SearchFlusher<RT, T> {
     ///
     /// Returns a map of IndexName to number of documents indexed for each
     /// index that was built.
-    pub async fn step(&mut self) -> anyhow::Result<(BTreeMap<TabletIndexName, u64>, Token)> {
+    pub async fn step(&self) -> anyhow::Result<(BTreeMap<TabletIndexName, u64>, Token)> {
         let mut metrics = BTreeMap::new();
 
         let (to_build, token) = self.needs_backfill().await?;
@@ -306,6 +310,14 @@ impl<RT: Runtime, T: SearchIndex + 'static> SearchFlusher<RT, T> {
                 },
             };
             if let Some(build_reason) = needs_backfill {
+                if FlusherType::from(build_reason) != self.flusher_type {
+                    tracing::info!(
+                        "Skipping build for index {name} with id {index_id} and {build_reason:?} \
+                         because it is a {:?} flusher",
+                        self.flusher_type
+                    );
+                    continue;
+                }
                 tracing::info!(
                     "Queueing {} index for rebuild: {name:?} ({build_reason:?})",
                     self.index_type_name()
@@ -324,7 +336,7 @@ impl<RT: Runtime, T: SearchIndex + 'static> SearchFlusher<RT, T> {
                 };
                 to_build.push(job);
             } else {
-                tracing::info!(
+                tracing::debug!(
                     "Search index {name} with id {index_id} does not need segment built"
                 );
             }

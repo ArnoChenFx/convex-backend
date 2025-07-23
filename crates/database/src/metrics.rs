@@ -15,6 +15,7 @@ use metrics::{
     log_distribution,
     log_distribution_with_labels,
     register_convex_counter,
+    register_convex_gauge,
     register_convex_histogram,
     CancelableTimer,
     IntoLabel,
@@ -1172,4 +1173,29 @@ register_convex_histogram!(
 );
 pub fn log_subscriptions_log_processed_writes(num_writes: usize) {
     log_distribution(&SUBSCRIPTION_LOG_PROCESSED_WRITES, num_writes as f64);
+}
+
+register_convex_counter!(
+    INDEX_TOO_LARGE_BLOCKING_WRITES,
+    "Number of transactions that failed because search indexes hadn't flushed",
+    &[SEARCH_TYPE_LABEL]
+);
+pub fn log_index_too_large_blocking_writes(index_type: SearchType) {
+    log_counter_with_labels(&INDEX_TOO_LARGE_BLOCKING_WRITES, 1, vec![index_type.tag()]);
+}
+
+register_convex_histogram!(
+    SUBSCRIPTION_QUEUE_LAG_SECONDS,
+    "How long subscription requests wait in the subscription worker queue",
+);
+pub fn log_subscription_queue_lag(seconds: f64) {
+    log_distribution(&SUBSCRIPTION_QUEUE_LAG_SECONDS, seconds);
+}
+
+register_convex_gauge!(
+    SUBSCRIPTION_QUEUE_LENGTH_INFO,
+    "The number of items in subscription queues",
+);
+pub fn log_subscription_queue_length_delta(delta: i64) {
+    SUBSCRIPTION_QUEUE_LENGTH_INFO.add(delta as f64);
 }

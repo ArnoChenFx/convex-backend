@@ -98,6 +98,7 @@ use crate::{
     index_workers::{
         search_compactor::CompactionConfig,
         writer::SearchIndexMetadataWriter,
+        FlusherType,
     },
     query::{
         PaginationOptions,
@@ -254,13 +255,14 @@ impl Scenario {
             self.search_storage.clone(),
             self.build_index_args.clone(),
         );
-        let mut flusher = new_text_flusher(
+        let flusher = new_text_flusher(
             self.rt.clone(),
             self.database.clone(),
             self.tp.reader(),
             self.search_storage.clone(),
             self.build_index_args.segment_term_metadata_fetcher.clone(),
             writer,
+            FlusherType::Backfill,
         );
         flusher.step().await?;
 
