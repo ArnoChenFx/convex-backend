@@ -1,5 +1,6 @@
 use std::{
     collections::BTreeMap,
+    path::Path,
     str::FromStr,
     sync::Arc,
 };
@@ -1361,5 +1362,193 @@ a,b
     assert_eq!(table_size, 0);
     assert!(!TableModel::new(&mut tx).table_exists(TableNamespace::test_user(), &table_name));
 
+    Ok(())
+}
+
+#[convex_macro::test_runtime]
+async fn test_utf8_bom_jsonarray(rt: TestRuntime) -> anyhow::Result<()> {
+    // UTF-8 BOM is the byte sequence: EF BB BF
+    let utf8_bom = [0xEF, 0xBB, 0xBF];
+
+    // Test JsonArray format with UTF-8 BOM - should now produce an error
+    let json_content = r#"[{"name": "test", "value": 42}, {"name": "hello", "value": 123}]"#;
+    let mut content_with_bom = Vec::new();
+    content_with_bom.extend_from_slice(&utf8_bom);
+    content_with_bom.extend_from_slice(json_content.as_bytes());
+
+    let storage_dir = tempfile::TempDir::new()?;
+    let storage: Arc<dyn Storage> = Arc::new(LocalDirStorage::for_use_case(
+        rt.clone(),
+        &storage_dir.path().to_string_lossy(),
+        StorageUseCase::SnapshotImports,
+    )?);
+
+    let mut upload = storage.start_upload().await?;
+    upload.write(Bytes::from(content_with_bom)).await?;
+    let object_key = upload.complete().await?;
+
+    let stream = || async { storage.get(&object_key).await?.context("missing object") };
+    let result = parse_objects(
+        ImportFormat::JsonArray("test_table".parse()?),
+        ComponentPath::root(),
+        stream,
+    )
+    .try_collect::<Vec<_>>()
+    .await;
+
+    // Should fail with UTF-8 BOM error
+    assert!(result.is_err());
+    let error_message = result.unwrap_err().to_string();
+    assert!(error_message.contains("UTF-8 BOM is not supported"));
+    Ok(())
+}
+
+#[convex_macro::test_runtime]
+async fn test_utf8_bom_jsonlines(rt: TestRuntime) -> anyhow::Result<()> {
+    // UTF-8 BOM is the byte sequence: EF BB BF
+    let utf8_bom = [0xEF, 0xBB, 0xBF];
+
+    // Test JsonLines format with UTF-8 BOM - should now produce an error
+    let jsonl_content = r#"{"name": "test", "value": 42}
+{"name": "hello", "value": 123}
+{"name": "world", "value": 456}"#;
+    let mut content_with_bom = Vec::new();
+    content_with_bom.extend_from_slice(&utf8_bom);
+    content_with_bom.extend_from_slice(jsonl_content.as_bytes());
+
+    let storage_dir = tempfile::TempDir::new()?;
+    let storage: Arc<dyn Storage> = Arc::new(LocalDirStorage::for_use_case(
+        rt.clone(),
+        &storage_dir.path().to_string_lossy(),
+        StorageUseCase::SnapshotImports,
+    )?);
+
+    let mut upload = storage.start_upload().await?;
+    upload.write(Bytes::from(content_with_bom)).await?;
+    let object_key = upload.complete().await?;
+
+    let stream = || async { storage.get(&object_key).await?.context("missing object") };
+    let result = parse_objects(
+        ImportFormat::JsonLines("test_table".parse()?),
+        ComponentPath::root(),
+        stream,
+    )
+    .try_collect::<Vec<_>>()
+    .await;
+
+    // Should fail with UTF-8 BOM error
+    assert!(result.is_err());
+    let error_message = result.unwrap_err().to_string();
+    assert!(error_message.contains("UTF-8 BOM is not supported"));
+    Ok(())
+}
+
+#[convex_macro::test_runtime]
+async fn test_utf8_bom_jsonarray_without_bom(rt: TestRuntime) -> anyhow::Result<()> {
+    // Test JsonArray format without UTF-8 BOM (should still work)
+    let json_content = r#"[{"name": "test", "value": 42}]"#;
+
+    let objects = run_parse_objects(
+        rt,
+        ImportFormat::JsonArray("test_table".parse()?),
+        json_content,
+    )
+    .await?;
+
+    let expected = vec![json!({"name": "test", "value": 42})];
+    assert_eq!(objects, expected);
+    Ok(())
+}
+
+#[convex_macro::test_runtime]
+async fn test_utf8_bom_jsonlines_without_bom(rt: TestRuntime) -> anyhow::Result<()> {
+    // Test JsonLines format without UTF-8 BOM (should still work)
+    let jsonl_content = r#"{"name": "test", "value": 42}
+{"name": "hello", "value": 123}"#;
+
+    let objects = run_parse_objects(
+        rt,
+        ImportFormat::JsonLines("test_table".parse()?),
+        jsonl_content,
+    )
+    .await?;
+
+    let expected = vec![
+        json!({"name": "test", "value": 42}),
+        json!({"name": "hello", "value": 123}),
+    ];
+    assert_eq!(objects, expected);
+    Ok(())
+}
+
+#[convex_macro::test_runtime]
+async fn test_utf8_bom_jsonlines_empty_lines(rt: TestRuntime) -> anyhow::Result<()> {
+    // UTF-8 BOM is the byte sequence: EF BB BF
+    let utf8_bom = [0xEF, 0xBB, 0xBF];
+
+    // Test JsonLines format with UTF-8 BOM and empty lines - should now produce an
+    // error
+    let jsonl_content = r#"{"name": "test", "value": 42}
+
+{"name": "hello", "value": 123}
+
+{"name": "world", "value": 456}"#;
+    let mut content_with_bom = Vec::new();
+    content_with_bom.extend_from_slice(&utf8_bom);
+    content_with_bom.extend_from_slice(jsonl_content.as_bytes());
+
+    let storage_dir = tempfile::TempDir::new()?;
+    let storage: Arc<dyn Storage> = Arc::new(LocalDirStorage::for_use_case(
+        rt.clone(),
+        &storage_dir.path().to_string_lossy(),
+        StorageUseCase::SnapshotImports,
+    )?);
+
+    let mut upload = storage.start_upload().await?;
+    upload.write(Bytes::from(content_with_bom)).await?;
+    let object_key = upload.complete().await?;
+
+    let stream = || async { storage.get(&object_key).await?.context("missing object") };
+    let result = parse_objects(
+        ImportFormat::JsonLines("test_table".parse()?),
+        ComponentPath::root(),
+        stream,
+    )
+    .try_collect::<Vec<_>>()
+    .await;
+
+    // Should fail with UTF-8 BOM error
+    assert!(result.is_err());
+    let error_message = result.unwrap_err().to_string();
+    assert!(error_message.contains("UTF-8 BOM is not supported"));
+    Ok(())
+}
+
+/// Test we can import over a componentless namespace. Componentless namespaces
+/// are created during start_push - the component is only created during
+/// finish_push
+#[convex_macro::test_runtime]
+async fn test_import_over_componentless_namespace(rt: TestRuntime) -> anyhow::Result<()> {
+    let app = Application::new_for_tests(&rt).await?;
+
+    // Do just a start_push w/o finish_push
+    let request = Application::<TestRuntime>::load_start_push_request(Path::new("basic"))?;
+    let config = request.into_project_config()?;
+    app.start_push(&config, false).await?;
+
+    let test_csv = r#"
+a,b
+"foo","bar"
+"#;
+    let num_rows_written = do_import(
+        &app,
+        new_admin_id(),
+        ImportFormat::Csv("table1".parse()?),
+        ImportMode::ReplaceAll,
+        ComponentPath::root(),
+        stream_from_str(test_csv),
+    )
+    .await?;
+    assert_eq!(num_rows_written, 1);
     Ok(())
 }
