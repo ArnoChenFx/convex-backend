@@ -137,10 +137,10 @@ have a working React app with Convex. If not follow the
       providers: [
         {
           type: 'customJwt',
-          issuer: `https://api.workos.com/${clientId}`,
+          issuer: `https://api.workos.com/`,
           algorithm: 'RS256',
-      applicationID: clientId,
       jwks: `https://api.workos.com/sso/jwks/${clientId}`,
+      applicationID: clientId,
         },
         {
           type: 'customJwt',
@@ -171,7 +171,7 @@ have a working React app with Convex. If not follow the
     In a new terminal window, install the AuthKit React SDK:
 
     ```sh
-    npm install @workos-inc/authkit-react
+    npm install @workos-inc/authkit-react @convex-dev/workos
     ```
 
   </Step>
@@ -303,10 +303,10 @@ have a working Next.js app with Convex. If not follow the
       providers: [
         {
           type: 'customJwt',
-          issuer: `https://api.workos.com/${clientId}`,
+          issuer: `https://api.workos.com/`,
           algorithm: 'RS256',
-      applicationID: clientId,
-      jwks: `https://api.workos.com/sso/jwks/${clientId}`,
+          applicationID: clientId,
+          jwks: `https://api.workos.com/sso/jwks/${clientId}`,
         },
         {
           type: 'customJwt',
@@ -337,7 +337,7 @@ have a working Next.js app with Convex. If not follow the
     In a new terminal window, install the AuthKit Next.js SDK:
 
     ```sh
-    npm install @workos-inc/authkit-nextjs
+    npm install @workos-inc/authkit-nextjs @convex-dev/workos
     ```
 
   </Step>
@@ -672,7 +672,7 @@ export default {
   providers: [
     {
       type: "customJwt",
-      issuer: `https://api.workos.com/${clientId}`,
+      issuer: `https://api.workos.com/`,
       algorithm: "RS256",
       applicationID: clientId,
       jwks: `https://api.workos.com/sso/jwks/${clientId}`,
