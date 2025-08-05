@@ -22,8 +22,8 @@ use common::{
         },
         DatabaseSchema,
         DocumentSchema,
-        SearchIndexSchema,
         TableDefinition,
+        TextIndexSchema,
     },
     types::TableName,
     value::FieldPath,
@@ -72,13 +72,13 @@ macro_rules! db_schema_with_search_indexes {
                 $(
                     let table_name: TableName = str::parse($table)?;
                     #[allow(unused)]
-                    let mut search_indexes = BTreeMap::new();
+                    let mut text_indexes = BTreeMap::new();
                     $(
                         let index_name = new_index_name($table, $index_name)?;
                         let field_path: FieldPath = str::parse($field).unwrap();
-                        search_indexes.insert(
+                        text_indexes.insert(
                             index_name.descriptor().clone(),
-                            SearchIndexSchema::new(
+                            TextIndexSchema::new(
                                 index_name.descriptor().clone(),
                                 field_path.try_into()?,
                                 BTreeSet::new(),
@@ -89,8 +89,8 @@ macro_rules! db_schema_with_search_indexes {
                         table_name: table_name.clone(),
                         indexes: BTreeMap::new(),
                         staged_db_indexes: Default::default(),
-                        search_indexes,
-                        staged_search_indexes: Default::default(),
+                        text_indexes,
+                        staged_text_indexes: Default::default(),
                         vector_indexes: Default::default(),
                         staged_vector_indexes: Default::default(),
                         document_type: None,
@@ -665,7 +665,7 @@ async fn apply_config_with_backfilling_search_index_throws(rt: TestRuntime) -> a
     assert_root_cause_contains(
         result,
         "Expected backfilled index, but found: Backfilling(TextIndexBackfillState { segments: [], \
-         cursor: None }) for \"index\"",
+         cursor: None, staged: false }) for \"index\"",
     );
 
     Ok(())
@@ -1106,7 +1106,7 @@ fn assert_index_data(actual: Vec<IndexConfig>, expected: Vec<TestIndexConfig>) {
             } => {
                 let db_state = match on_disk_state {
                     DatabaseIndexState::Backfilling(_) => TestIndexState::Backfilling,
-                    DatabaseIndexState::Backfilled => TestIndexState::Backfilled,
+                    DatabaseIndexState::Backfilled { .. } => TestIndexState::Backfilled,
                     DatabaseIndexState::Enabled => TestIndexState::Enabled,
                 };
                 assert_eq!(developer_config.fields.len(), 1);
@@ -1119,7 +1119,7 @@ fn assert_index_data(actual: Vec<IndexConfig>, expected: Vec<TestIndexConfig>) {
             } => {
                 let search_state = match on_disk_state {
                     TextIndexState::Backfilling(_) => TestIndexState::Backfilling,
-                    TextIndexState::Backfilled(_) => TestIndexState::Backfilled,
+                    TextIndexState::Backfilled { .. } => TestIndexState::Backfilled,
                     TextIndexState::SnapshottedAt(_) => TestIndexState::Enabled,
                 };
                 TestIndexConfig(developer_config.search_field.to_string(), search_state)
@@ -1130,7 +1130,7 @@ fn assert_index_data(actual: Vec<IndexConfig>, expected: Vec<TestIndexConfig>) {
             } => {
                 let vector_state = match on_disk_state {
                     VectorIndexState::Backfilling(_) => TestIndexState::Backfilling,
-                    VectorIndexState::Backfilled(_) => TestIndexState::Backfilled,
+                    VectorIndexState::Backfilled { .. } => TestIndexState::Backfilled,
                     VectorIndexState::SnapshottedAt(_) => TestIndexState::Enabled,
                 };
                 TestIndexConfig(developer_config.vector_field.to_string(), vector_state)
