@@ -558,7 +558,7 @@ importers:
         specifier: ^4.0.0
         version: 4.0.0
       prettier:
-        specifier: 3.6.2
+        specifier: ^3.0.0
         version: 3.6.2
     devDependencies:
       '@auth0/auth0-react':
@@ -697,8 +697,8 @@ importers:
         specifier: ^7.0.0
         version: 7.0.0
       globals:
-        specifier: ~15.15.0
-        version: 15.15.0
+        specifier: ~16.3.0
+        version: 16.3.0
       happy-dom:
         specifier: ~17.6.0
         version: 17.6.3
@@ -4024,8 +4024,8 @@ importers:
         specifier: ^4.2.1
         version: 4.3.4(vite@6.3.5(@types/node@22.10.5)(jiti@2.4.2)(less@4.2.1)(lightningcss@1.30.1)(sass@1.89.2)(terser@5.37.0)(tsx@4.19.4)(yaml@2.7.0))
       globals:
-        specifier: ~15.15.0
-        version: 15.15.0
+        specifier: ~16.3.0
+        version: 16.3.0
       typescript:
         specifier: ~5.6.2
         version: 5.6.3
@@ -15231,12 +15231,12 @@ packages:
     resolution: {integrity: sha512-oahGvuMGQlPw/ivIYBjVSrWAfWLBeku5tpPE2fOPLi+WHffIWbuh2tCjhyQhTBPMf5E9jDEH4FOmTYgYwbKwtQ==}
     engines: {node: '>=18'}
 
-  globals@15.15.0:
-    resolution: {integrity: sha512-7ACyT3wmyp3I61S4fG682L0VA2RGD9otkqGJIwNUMF1SWUombIIk+af1unuDYgMm082aHYwD+mzJvv9Iu8dsgg==}
-    engines: {node: '>=18'}
-
   globals@15.9.0:
     resolution: {integrity: sha512-SmSKyLLKFbSr6rptvP8izbyxJL4ILwqO9Jg23UA0sDlGlu58V59D1//I3vlc0KJphVdUR7vMjHIplYnzBxorQA==}
+    engines: {node: '>=18'}
+
+  globals@16.3.0:
+    resolution: {integrity: sha512-bqWEnJ1Nt3neqx2q5SFfGS8r/ahumIakg3HcwtNlrVlwXIeNumWn/c7Pn/wKzGhf6SaW6H6uWXLqC30STCMchQ==}
     engines: {node: '>=18'}
 
   globalthis@1.0.4:
@@ -38934,9 +38934,9 @@ snapshots:
 
   globals@14.0.0: {}
 
-  globals@15.15.0: {}
-
   globals@15.9.0: {}
+
+  globals@16.3.0: {}
 
   globalthis@1.0.4:
     dependencies:
