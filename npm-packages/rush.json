@@ -301,6 +301,10 @@
       "projectFolder": "@convex-dev/platform"
     },
     {
+      "packageName": "clerk-initial-auth",
+      "projectFolder": "private-demos/clerk-initial-auth"
+    },
+    {
       "packageName": "bundle-size",
       "projectFolder": "private-demos/bundle-size"
     },
@@ -319,6 +323,10 @@
     {
       "packageName": "typescript-demo",
       "projectFolder": "demos/typescript"
+    },
+    {
+      "packageName": "prewarming-demo",
+      "projectFolder": "demos/prewarming"
     },
     {
       "packageName": "typescript-demo-old",

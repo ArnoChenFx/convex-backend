@@ -20,6 +20,11 @@ See editor specific instructions:
 - [Cursor](/ai/using-cursor.mdx#setup-the-convex-mcp-server)
 - [Windsurf](/ai/using-windsurf.mdx#setup-the-convex-mcp-server)
 - [VS Code](/ai/using-github-copilot.mdx#setup-the-convex-mcp-server)
+- Claude Code: add the MCP server and test with
+  ```bash
+  claude mcp add-json convex '{"type":"stdio","command":"npx","args":["convex","mcp","start"]}'
+  claude mcp get convex
+  ```
 
 ## Available Tools
 
@@ -52,6 +57,9 @@ See editor specific instructions:
   - Interface specifications
 
 - **`run`**: Executes deployed Convex functions with provided arguments.
+
+- **`logs`**: Fetches a chunk of recent function execution log entries, similar
+  to `npx convex logs` but as structured objects.
 
 ### Environment Variable Tools
 
