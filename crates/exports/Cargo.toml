@@ -1,80 +1,71 @@
 [package]
-name = "function_runner"
+name = "exports"
 version = "0.1.0"
 edition = "2021"
 license = "LicenseRef-FSL-1.1-Apache-2.0"
 
-[package.metadata.cargo-udeps.ignore]
-normal = ["mysql"]
-development = ["mysql"]
+[lib]
+doctest = false
 
 [features]
 testing = [
     "common/testing",
     "database/testing",
     "errors/testing",
-    "indexing/testing",
-    "isolate/testing",
     "keybroker/testing",
     "metrics/testing",
     "model/testing",
-    "proptest",
-    "proptest-derive",
-    "runtime/testing",
+    "shape_inference/testing",
     "storage/testing",
-    "udf/testing",
     "usage_tracking/testing",
     "value/testing",
 ]
-tracy-tracing = ["common/tracy-tracing"]
 
 [dependencies]
 anyhow = { workspace = true }
-async-trait = { workspace = true }
-async_lru = { workspace = true }
+async_zip = { workspace = true }
+bytes = { workspace = true }
 common = { workspace = true }
-convex_macro = { workspace = true }
 database = { workspace = true }
 errors = { workspace = true }
 fastrace = { workspace = true }
-file_storage = { workspace = true }
 futures = { workspace = true }
-imbl = { workspace = true }
-indexing = { workspace = true }
-isolate = { workspace = true }
+itertools = { workspace = true }
 keybroker = { workspace = true }
+maplit = { workspace = true }
 metrics = { workspace = true }
+mime2ext = { workspace = true }
 model = { workspace = true }
-moka = { workspace = true }
-parking_lot = { workspace = true }
-prometheus = { workspace = true }
-proptest = { workspace = true, optional = true }
-proptest-derive = { workspace = true, optional = true }
-runtime = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+shape_inference = { workspace = true }
 storage = { workspace = true }
-sync_types = { workspace = true }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
-udf = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
 usage_tracking = { workspace = true }
 value = { workspace = true }
 
 [dev-dependencies]
-
+async_zip_reader = { workspace = true }
 common = { workspace = true, features = ["testing"] }
+convex_macro = { workspace = true }
 database = { workspace = true, features = ["testing"] }
 errors = { workspace = true, features = ["testing"] }
-indexing = { workspace = true, features = ["testing"] }
-isolate = { workspace = true, features = ["testing"] }
+events = { workspace = true }
+file_storage = { workspace = true }
+headers = { workspace = true }
 keybroker = { workspace = true, features = ["testing"] }
 metrics = { workspace = true, features = ["testing"] }
 model = { workspace = true, features = ["testing"] }
-proptest = { workspace = true }
-proptest-derive = { workspace = true }
-runtime = { workspace = true, features = ["testing"] }
+pretty_assertions = { workspace = true }
+runtime = { workspace = true }
+shape_inference = { workspace = true, features = ["testing"] }
 storage = { workspace = true, features = ["testing"] }
-udf = { workspace = true, features = ["testing"] }
-usage_tracking = { workspace = true, features = ["testing"] }
+usage_tracking = { workspace = true, features = [
+    "testing",
+] }
 value = { workspace = true, features = ["testing"] }
 
 [lints]
