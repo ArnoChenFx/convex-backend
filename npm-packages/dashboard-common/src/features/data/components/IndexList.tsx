@@ -143,7 +143,7 @@ function stagedIndexSyntaxForType(indexType: IndexType) {
     case "vector":
       return ".stagedVectorIndex()";
     default: {
-      const _exhaustivenessCheck: never = indexType;
+      indexType satisfies never;
       return "unknown";
     }
   }
@@ -158,7 +158,7 @@ function indexSyntaxForType(indexType: IndexType) {
     case "vector":
       return ".vectorIndex()";
     default: {
-      const _exhaustivenessCheck: never = indexType;
+      indexType satisfies never;
       return "unknown";
     }
   }
@@ -231,9 +231,7 @@ function IndexListRow({
         )}
       </div>
 
-      {(index.backfill.state === "in_progress" ||
-        index.backfill.state === "backfilling" ||
-        index.backfill.state === "backfilled") && (
+      {index.backfill.state === "backfilling" && (
         <div className="flex flex-col gap-1 pl-2">
           <div className="flex items-center gap-2">
             {!(
@@ -247,10 +245,23 @@ function IndexListRow({
           </div>
           {index.backfill.stats && index.backfill.stats.totalDocs !== null && (
             <IndexBackfillProgress
-              numDocsIndexed={index.backfill.stats.numDocsIndexed}
-              totalDocs={index.backfill.stats.totalDocs}
+              fraction={Math.min(
+                // numDocsIndexed is an estimate and can grow larger than totalDocs
+                // (in particular because if new documents are added during the backfill,
+                // totalDocs is not updated), so we cap at 99% to not confuse the user
+                0.99,
+                index.backfill.stats.numDocsIndexed /
+                  index.backfill.stats.totalDocs,
+              )}
+              variant="stripes"
             />
           )}
+        </div>
+      )}
+      {index.backfill.state === "backfilled" && (
+        <div className="flex flex-col gap-1 pl-2">
+          Backfill completed
+          <IndexBackfillProgress fraction={1} variant="solid" />
         </div>
       )}
     </article>
@@ -287,23 +298,24 @@ function FieldList({ fields }: { fields: string[] }) {
 }
 
 function IndexBackfillProgress({
-  numDocsIndexed,
-  totalDocs,
+  fraction,
+  variant,
 }: {
-  numDocsIndexed: number;
-  totalDocs: number;
+  fraction: number;
+  variant: "stripes" | "solid";
 }) {
-  const fraction = Math.min(numDocsIndexed / totalDocs, 0.99);
   const percent = Math.round(fraction * 100);
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex items-center gap-3">
       <ProgressBar
         fraction={fraction}
         ariaLabel="Index backfill progress"
-        variant="stripes"
+        variant={variant}
         className="grow"
       />
-      <span className="text-xs text-content-tertiary">{percent}%</span>
+      <span className="min-w-[4ch] text-right text-xs text-content-tertiary tabular-nums">
+        {percent}%
+      </span>
     </div>
   );
 }
@@ -321,6 +333,6 @@ function getIndexType(index: Index): IndexType | "unknown" {
     return "vector";
   }
 
-  const _unreachable: never = index.fields;
+  index.fields satisfies never;
   return "unknown";
 }

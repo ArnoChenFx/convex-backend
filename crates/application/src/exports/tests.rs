@@ -15,7 +15,6 @@ use database::{
     Database,
     UserFacingModel,
 };
-use events::usage::NoOpUsageEventLogger;
 use exports::ExportComponents;
 use keybroker::Identity;
 use maplit::btreeset;
@@ -31,7 +30,6 @@ use storage::{
     StorageExt as _,
 };
 use tokio::io::AsyncReadExt as _;
-use usage_tracking::UsageCounter;
 use value::{
     assert_obj,
     export::ValueFormat,
@@ -100,14 +98,6 @@ async fn test_export_components(rt: TestRuntime) -> anyhow::Result<()> {
     let db = application.database().clone();
     let storage: Arc<dyn Storage> = Arc::new(LocalDirStorage::new(rt.clone())?);
     let file_storage: Arc<dyn Storage> = Arc::new(LocalDirStorage::new(rt.clone())?);
-    let export_components = ExportComponents {
-        runtime: rt.clone(),
-        database: db.clone(),
-        storage: storage.clone(),
-        file_storage,
-        usage_tracking: UsageCounter::new(Arc::new(NoOpUsageEventLogger)),
-        instance_name: "carnitas".to_string(),
-    };
 
     let mut expected_export_entries = BTreeMap::new();
 
@@ -129,8 +119,14 @@ async fn test_export_components(rt: TestRuntime) -> anyhow::Result<()> {
             .await?;
     }
 
-    let (_, zip_object_key, usage) = exports::export_inner(
-        &export_components,
+    let (zip_object_key, usage) = exports::export_inner(
+        &ExportComponents {
+            runtime: rt.clone(),
+            database: db.latest_database_snapshot()?,
+            storage: storage.clone(),
+            file_storage,
+            instance_name: "carnitas".to_string(),
+        },
         ExportFormat::Zip {
             include_storage: false,
         },
@@ -172,14 +168,6 @@ async fn test_export_unmounted_components(rt: TestRuntime) -> anyhow::Result<()>
     let db = application.database().clone();
     let storage: Arc<dyn Storage> = Arc::new(LocalDirStorage::new(rt.clone())?);
     let file_storage: Arc<dyn Storage> = Arc::new(LocalDirStorage::new(rt.clone())?);
-    let export_components = ExportComponents {
-        runtime: rt.clone(),
-        database: db.clone(),
-        storage: storage.clone(),
-        file_storage,
-        usage_tracking: UsageCounter::new(Arc::new(NoOpUsageEventLogger)),
-        instance_name: "carnitas".to_string(),
-    };
 
     let expected_export_entries = btreeset! {
         "README.md".to_string(),
@@ -193,8 +181,14 @@ async fn test_export_unmounted_components(rt: TestRuntime) -> anyhow::Result<()>
         "_tables/documents.jsonl".to_string(),
     };
 
-    let (_, zip_object_key, usage) = exports::export_inner(
-        &export_components,
+    let (zip_object_key, usage) = exports::export_inner(
+        &ExportComponents {
+            runtime: rt.clone(),
+            database: db.latest_database_snapshot()?,
+            storage: storage.clone(),
+            file_storage,
+            instance_name: "carnitas".to_string(),
+        },
         ExportFormat::Zip {
             include_storage: false,
         },

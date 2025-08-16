@@ -26,7 +26,6 @@ use database::{
     TableModel,
     UserFacingModel,
 };
-use events::usage::NoOpUsageEventLogger;
 use file_storage::{
     FileStorage,
     TransactionalFileStorage,
@@ -51,10 +50,7 @@ use storage::{
     StorageExt,
 };
 use tokio::io::AsyncReadExt;
-use usage_tracking::{
-    FunctionUsageTracker,
-    UsageCounter,
-};
+use usage_tracking::FunctionUsageTracker;
 use value::{
     assert_obj,
     export::ValueFormat,
@@ -82,10 +78,9 @@ async fn setup_export_test(rt: &TestRuntime) -> anyhow::Result<ExportFixtures> {
     Ok(ExportFixtures {
         export_components: ExportComponents {
             runtime: rt.clone(),
-            database: db.clone(),
+            database: db.latest_database_snapshot()?,
             storage,
             file_storage,
-            usage_tracking: UsageCounter::new(Arc::new(NoOpUsageEventLogger)),
             instance_name: "carnitas".to_string(),
         },
         db,
@@ -95,7 +90,7 @@ async fn setup_export_test(rt: &TestRuntime) -> anyhow::Result<ExportFixtures> {
 #[convex_macro::test_runtime]
 async fn test_export_zip(rt: TestRuntime) -> anyhow::Result<()> {
     let ExportFixtures {
-        export_components,
+        mut export_components,
         db,
     } = setup_export_test(&rt).await?;
 
@@ -181,7 +176,8 @@ async fn test_export_zip(rt: TestRuntime) -> anyhow::Result<()> {
         );
         db.commit(tx).await?;
     }
-    let (_, zip_object_key, usage) = export_inner(
+    export_components.database = db.latest_database_snapshot()?;
+    let (zip_object_key, usage) = export_inner(
         &export_components,
         ExportFormat::Zip {
             include_storage: true,
@@ -224,11 +220,11 @@ async fn test_export_zip(rt: TestRuntime) -> anyhow::Result<()> {
 #[convex_macro::test_runtime]
 async fn test_export_storage(rt: TestRuntime) -> anyhow::Result<()> {
     let ExportFixtures {
-        export_components,
+        mut export_components,
         db,
     } = setup_export_test(&rt).await?;
     let file_storage_wrapper = FileStorage {
-        database: export_components.database.clone(),
+        database: db.clone(),
         transactional_file_storage: TransactionalFileStorage::new(
             rt,
             export_components.file_storage.clone(),
@@ -282,7 +278,8 @@ async fn test_export_storage(rt: TestRuntime) -> anyhow::Result<()> {
         ),
     );
 
-    let (_, zip_object_key, usage) = export_inner(
+    export_components.database = db.latest_database_snapshot()?;
+    let (zip_object_key, usage) = export_inner(
         &export_components,
         ExportFormat::Zip {
             include_storage: true,
@@ -322,7 +319,7 @@ async fn test_export_storage(rt: TestRuntime) -> anyhow::Result<()> {
 #[convex_macro::test_runtime]
 async fn test_export_many_storage_files(rt: TestRuntime) -> anyhow::Result<()> {
     let ExportFixtures {
-        export_components,
+        mut export_components,
         db,
     } = setup_export_test(&rt).await?;
     let file_storage_wrapper = FileStorage {
@@ -351,7 +348,8 @@ async fn test_export_many_storage_files(rt: TestRuntime) -> anyhow::Result<()> {
         ids.push(id);
     }
 
-    let (_, zip_object_key, _) = export_inner(
+    export_components.database = db.latest_database_snapshot()?;
+    let (zip_object_key, _) = export_inner(
         &export_components,
         ExportFormat::Zip {
             include_storage: true,
@@ -392,7 +390,7 @@ async fn test_export_many_storage_files(rt: TestRuntime) -> anyhow::Result<()> {
 #[convex_macro::test_runtime]
 async fn test_export_with_table_delete(rt: TestRuntime) -> anyhow::Result<()> {
     let ExportFixtures {
-        export_components,
+        mut export_components,
         db,
     } = setup_export_test(&rt).await?;
 
@@ -413,7 +411,8 @@ async fn test_export_with_table_delete(rt: TestRuntime) -> anyhow::Result<()> {
         .await?;
     db.commit(tx).await?;
 
-    let (_, _zip_object_key, _) = export_inner(
+    export_components.database = db.latest_database_snapshot()?;
+    let (_zip_object_key, _) = export_inner(
         &export_components,
         ExportFormat::Zip {
             include_storage: false,
@@ -428,7 +427,7 @@ async fn test_export_with_table_delete(rt: TestRuntime) -> anyhow::Result<()> {
 #[convex_macro::test_runtime]
 async fn test_export_with_namespace_without_component(rt: TestRuntime) -> anyhow::Result<()> {
     let ExportFixtures {
-        export_components,
+        mut export_components,
         db,
     } = setup_export_test(&rt).await?;
 
@@ -443,6 +442,7 @@ async fn test_export_with_namespace_without_component(rt: TestRuntime) -> anyhow
     db.commit(tx).await?;
 
     // Export the namespace.
+    export_components.database = db.latest_database_snapshot()?;
     let (..) = export_inner(
         &export_components,
         ExportFormat::Zip {
