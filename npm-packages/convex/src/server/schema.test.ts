@@ -459,11 +459,13 @@ describe("DataModelFromSchemaDefinition", () => {
       table: defineTable({
         enabled: v.string(),
         enabled2: v.string(),
+        enabled3: v.string(),
         staged: v.string(),
       })
         .index("by_enabled", ["enabled"])
-        .index("by_enabled2", ["enabled2"], { staged: false })
-        .index("by_staged", ["staged"], { staged: true }),
+        .index("by_enabled2", { fields: ["enabled2"] })
+        .index("by_enabled3", { fields: ["enabled3"], staged: false })
+        .index("by_staged", { fields: ["staged"], staged: true }),
     });
     type Indexes = DataModelFromSchemaDefinition<
       typeof schema
@@ -471,6 +473,7 @@ describe("DataModelFromSchemaDefinition", () => {
     type ExpectedIndexes = {
       by_enabled: ["enabled", "_creationTime"];
       by_enabled2: ["enabled2", "_creationTime"];
+      by_enabled3: ["enabled3", "_creationTime"];
       by_id: ["_id"];
       by_creation_time: ["_creationTime"];
     };
@@ -547,10 +550,11 @@ describe("DataModelFromSchemaDefinition", () => {
 
 test("defineSchema doesn’t allow creating indexes with a staged status not known at compile time", () => {
   defineSchema({
+    // @ts-expect-error
     table: defineTable({
       field: v.string(),
-    }).index("staged_database_index", ["field"], {
-      // @ts-expect-error
+    }).index("staged_database_index", {
+      fields: ["field"],
       staged: Math.random() < 0.5,
     }),
   });
@@ -570,6 +574,7 @@ test("defineSchema doesn’t allow creating indexes with a staged status not kno
       field: v.array(v.float64()),
     }).vectorIndex("staged_vector_index", {
       vectorField: "field",
+      dimensions: 42,
       // @ts-expect-error
       staged: Math.random() < 0.5,
     }),

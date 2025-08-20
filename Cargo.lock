@@ -2603,6 +2603,7 @@ checksum = "5c297a1c74b71ae29df00c3e22dd9534821d60eb9af5a0192823fa2acea70c2a"
 name = "database"
 version = "0.1.0"
 dependencies = [
+ "ahash",
  "anyhow",
  "async-broadcast",
  "async-channel",
@@ -2623,6 +2624,7 @@ dependencies = [
  "futures",
  "futures-async-stream",
  "governor",
+ "hashlink 0.10.0",
  "humansize",
  "imbl",
  "indexing",
@@ -2652,6 +2654,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-stream",
+ "tokio-util",
  "tracing",
  "usage_tracking",
  "value",
@@ -3215,6 +3218,7 @@ name = "exports"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "async_zip 0.0.17",
  "async_zip_reader",
  "bytes",
@@ -4002,6 +4006,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ba4ff7128dee98c7dc9794b6a411377e1404dba1c97deb8d1a55297bd25d8af"
 dependencies = [
  "hashbrown 0.14.5",
+]
+
+[[package]]
+name = "hashlink"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7382cf6263419f2d8df38c55d7da83da5c18aef87fc7a7fc1fb1e344edfe14c1"
+dependencies = [
+ "hashbrown 0.15.2",
 ]
 
 [[package]]
@@ -5146,6 +5159,7 @@ dependencies = [
  "either",
  "errors",
  "events",
+ "exports",
  "fastrace",
  "file_storage",
  "function_runner",
@@ -5192,6 +5206,8 @@ dependencies = [
  "url",
  "urlencoding",
  "usage_tracking",
+ "utoipa",
+ "utoipa-axum",
  "value",
  "vector",
  "vergen",
@@ -7590,7 +7606,7 @@ dependencies = [
  "bitflags 2.9.1",
  "fallible-iterator 0.3.0",
  "fallible-streaming-iterator",
- "hashlink",
+ "hashlink 0.9.1",
  "libsqlite3-sys",
  "smallvec",
 ]
@@ -9965,6 +9981,19 @@ dependencies = [
  "serde",
  "serde_json",
  "utoipa-gen",
+]
+
+[[package]]
+name = "utoipa-axum"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c25bae5bccc842449ec0c5ddc5cbb6a3a1eaeac4503895dc105a1138f8234a0"
+dependencies = [
+ "axum",
+ "paste",
+ "tower-layer",
+ "tower-service",
+ "utoipa",
 ]
 
 [[package]]

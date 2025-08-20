@@ -21,6 +21,7 @@ use std::{
     },
 };
 
+use ::exports::interface::ExportProvider;
 use ::log_streaming::{
     LogManager,
     LogManagerClient,
@@ -84,6 +85,7 @@ use common::{
     },
     knobs::{
         APPLICATION_MAX_CONCURRENT_UPLOADS,
+        ENABLE_INDEX_BACKFILL,
         MAX_JOBS_CANCEL_BATCH,
         MAX_USER_MODULES,
     },
@@ -547,7 +549,7 @@ pub struct Application<RT: Runtime> {
     instance_name: String,
     scheduled_job_runner: ScheduledJobRunner,
     cron_job_executor: Arc<Mutex<Box<dyn SpawnHandle>>>,
-    index_worker: Arc<Mutex<Box<dyn SpawnHandle>>>,
+    index_worker: Arc<Mutex<Option<Box<dyn SpawnHandle>>>>,
     fast_forward_worker: Arc<Mutex<Box<dyn SpawnHandle>>>,
     search_worker: Arc<Mutex<SearchIndexWorkers>>,
     search_and_vector_bootstrap_worker: Arc<Mutex<Box<dyn SpawnHandle>>>,
@@ -686,6 +688,7 @@ impl<RT: Runtime> Application<RT> {
         fetch_client: Arc<dyn FetchClient>,
         local_log_sink: Option<String>,
         lease_lost_shutdown: ShutdownSignal,
+        export_provider: Arc<dyn ExportProvider<RT>>,
     ) -> anyhow::Result<Self> {
         let module_cache =
             ModuleCache::new(runtime.clone(), application_storage.modules_storage.clone()).await;
@@ -696,13 +699,18 @@ impl<RT: Runtime> Application<RT> {
             CONVEX_SITE.clone() => convex_site.parse()?
         };
 
-        let index_worker = IndexWorker::new(
-            runtime.clone(),
-            persistence.clone(),
-            database.retention_validator(),
-            database.clone(),
-        );
-        let index_worker = Arc::new(Mutex::new(runtime.spawn("index_worker", index_worker)));
+        let mut index_worker = Arc::new(Mutex::new(None));
+        if *ENABLE_INDEX_BACKFILL {
+            let index_worker_fut = IndexWorker::new(
+                runtime.clone(),
+                persistence.clone(),
+                database.retention_validator(),
+                database.clone(),
+            );
+            index_worker = Arc::new(Mutex::new(Some(
+                runtime.spawn("index_worker", index_worker_fut),
+            )));
+        };
         let fast_forward_worker =
             FastForwardIndexWorker::create_and_start(runtime.clone(), database.clone());
         let fast_forward_worker = Arc::new(Mutex::new(
@@ -805,6 +813,7 @@ impl<RT: Runtime> Application<RT> {
             database.clone(),
             application_storage.exports_storage.clone(),
             application_storage.files_storage.clone(),
+            export_provider,
             database.usage_counter(),
             instance_name.clone(),
         );
@@ -3446,7 +3455,10 @@ impl<RT: Runtime> Application<RT> {
         self.table_summary_worker.shutdown().await?;
         self.system_table_cleanup_worker.lock().shutdown();
         self.schema_worker.lock().shutdown();
-        self.index_worker.lock().shutdown();
+        let index_worker = self.index_worker.lock().take();
+        if let Some(index_worker) = index_worker {
+            shutdown_and_join(index_worker).await?;
+        }
         self.search_worker.lock().shutdown();
         self.search_and_vector_bootstrap_worker.lock().shutdown();
         self.fast_forward_worker.lock().shutdown();
