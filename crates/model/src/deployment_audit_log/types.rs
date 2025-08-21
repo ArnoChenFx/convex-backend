@@ -5,12 +5,7 @@ use std::{
 };
 
 use common::{
-    bootstrap_model::index::{
-        DeveloperIndexConfig,
-        IndexMetadata,
-        SerializedDeveloperIndexConfig,
-        SerializedNamedDeveloperIndexConfig,
-    },
+    bootstrap_model::index::IndexMetadata,
     components::ComponentPath,
     http::RequestDestination,
     log_streaming::{
@@ -24,7 +19,6 @@ use common::{
         IndexName,
     },
 };
-use database::LegacyIndexDiff;
 #[cfg(any(test, feature = "testing"))]
 use proptest::prelude::*;
 use serde::{
@@ -55,6 +49,11 @@ use crate::{
         SerializedComponentDiff,
     },
     config::types::ConfigDiff,
+    deployment_audit_log::developer_index_config::{
+        DeveloperIndexConfig,
+        SerializedDeveloperIndexConfig,
+        SerializedNamedDeveloperIndexConfig,
+    },
     environment_variables::types::EnvVarName,
     snapshot_imports::types::{
         ImportFormat,
@@ -171,8 +170,8 @@ pub enum DeploymentAuditLogEvent {
     },
 }
 
-impl From<LegacyIndexDiff> for DeploymentAuditLogEvent {
-    fn from(value: LegacyIndexDiff) -> Self {
+impl From<IndexDiff> for DeploymentAuditLogEvent {
+    fn from(value: IndexDiff) -> Self {
         let added_indexes = value
             .added
             .into_iter()
@@ -538,7 +537,7 @@ impl TryFrom<AuditLogIndexDiff> for SerializedIndexDiff {
                     .into_iter()
                     .map(|(name, config)| {
                         let name = name.to_string();
-                        let index_config = SerializedDeveloperIndexConfig::try_from(config)?;
+                        let index_config = SerializedDeveloperIndexConfig::from(config);
                         anyhow::Ok(SerializedNamedDeveloperIndexConfig { name, index_config })
                     })
                     .try_collect()
