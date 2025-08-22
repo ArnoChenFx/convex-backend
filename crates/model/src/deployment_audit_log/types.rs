@@ -85,6 +85,20 @@ pub struct AuditLogIndexDiff {
         )
     )]
     pub removed_indexes: Vec<(IndexName, DeveloperIndexConfig)>,
+    #[cfg_attr(
+        any(test, feature = "testing"),
+        proptest(
+            strategy = "prop::collection::vec(any::<(IndexName, DeveloperIndexConfig)>(), 0..4)"
+        )
+    )]
+    pub enabled_indexes: Vec<(IndexName, DeveloperIndexConfig)>,
+    #[cfg_attr(
+        any(test, feature = "testing"),
+        proptest(
+            strategy = "prop::collection::vec(any::<(IndexName, DeveloperIndexConfig)>(), 0..4)"
+        )
+    )]
+    pub disabled_indexes: Vec<(IndexName, DeveloperIndexConfig)>,
 }
 
 impl From<IndexDiff> for AuditLogIndexDiff {
@@ -99,9 +113,21 @@ impl From<IndexDiff> for AuditLogIndexDiff {
             .into_iter()
             .map(|index| (index.name.clone(), index.into_value().config.into()))
             .collect();
+        let enabled_indexes = diff
+            .enabled
+            .into_iter()
+            .map(|index| (index.name.clone(), index.into_value().config.into()))
+            .collect();
+        let disabled_indexes = diff
+            .disabled
+            .into_iter()
+            .map(|index| (index.name.clone(), index.into_value().config.into()))
+            .collect();
         Self {
             added_indexes,
             removed_indexes,
+            enabled_indexes,
+            disabled_indexes,
         }
     }
 }
@@ -525,12 +551,24 @@ pub struct SerializedIndexDiff {
                              SerializedNamedDeveloperIndexConfig>(), 0..4)")
     )]
     pub removed_indexes: Vec<SerializedNamedDeveloperIndexConfig>,
+    #[cfg_attr(
+        any(test, feature = "testing"),
+        proptest(strategy = "prop::collection::vec(any::<
+                             SerializedNamedDeveloperIndexConfig>(), 0..4)")
+    )]
+    #[serde(default)]
+    pub disabled_indexes: Vec<SerializedNamedDeveloperIndexConfig>,
+    #[cfg_attr(
+        any(test, feature = "testing"),
+        proptest(strategy = "prop::collection::vec(any::<
+                             SerializedNamedDeveloperIndexConfig>(), 0..4)")
+    )]
+    #[serde(default)]
+    pub enabled_indexes: Vec<SerializedNamedDeveloperIndexConfig>,
 }
 
-impl TryFrom<AuditLogIndexDiff> for SerializedIndexDiff {
-    type Error = anyhow::Error;
-
-    fn try_from(diff: AuditLogIndexDiff) -> anyhow::Result<Self> {
+impl From<AuditLogIndexDiff> for SerializedIndexDiff {
+    fn from(diff: AuditLogIndexDiff) -> Self {
         let convert_to_serialized =
             |indexes: Vec<(GenericIndexName<TableName>, DeveloperIndexConfig)>| {
                 indexes
@@ -538,16 +576,20 @@ impl TryFrom<AuditLogIndexDiff> for SerializedIndexDiff {
                     .map(|(name, config)| {
                         let name = name.to_string();
                         let index_config = SerializedDeveloperIndexConfig::from(config);
-                        anyhow::Ok(SerializedNamedDeveloperIndexConfig { name, index_config })
+                        SerializedNamedDeveloperIndexConfig { name, index_config }
                     })
-                    .try_collect()
+                    .collect()
             };
-        let added_indexes = convert_to_serialized(diff.added_indexes)?;
-        let removed_indexes = convert_to_serialized(diff.removed_indexes)?;
-        Ok(Self {
+        let added_indexes = convert_to_serialized(diff.added_indexes);
+        let removed_indexes = convert_to_serialized(diff.removed_indexes);
+        let disabled_indexes = convert_to_serialized(diff.disabled_indexes);
+        let enabled_indexes = convert_to_serialized(diff.enabled_indexes);
+        Self {
             added_indexes,
             removed_indexes,
-        })
+            disabled_indexes,
+            enabled_indexes,
+        }
     }
 }
 
@@ -567,9 +609,13 @@ impl TryFrom<SerializedIndexDiff> for AuditLogIndexDiff {
         };
         let added_indexes = convert_to_index_metadata(diff.added_indexes)?;
         let removed_indexes = convert_to_index_metadata(diff.removed_indexes)?;
+        let disabled_indexes = convert_to_index_metadata(diff.disabled_indexes)?;
+        let enabled_indexes = convert_to_index_metadata(diff.enabled_indexes)?;
         Ok(Self {
             added_indexes,
             removed_indexes,
+            disabled_indexes,
+            enabled_indexes,
         })
     }
 }
