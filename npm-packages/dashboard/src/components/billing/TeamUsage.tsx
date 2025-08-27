@@ -285,6 +285,22 @@ function FunctionBreakdownSection({
     itemsPerPage: 20,
   });
 
+  // Reset the page number when the filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    team,
+    projectId,
+    componentPrefix,
+    dateRange?.from,
+    dateRange?.to,
+    shownBillingPeriod.type,
+    shownBillingPeriod.from,
+    shownBillingPeriod.to,
+    functionBreakdownTabIndex,
+    setCurrentPage, // stable
+  ]);
+
   const isFunctionBreakdownBandwidthAvailable =
     shownBillingPeriod === null || shownBillingPeriod.from >= "2024-01-01";
 
@@ -357,6 +373,7 @@ function useUsageByProject(
           total: sumBy(rows, metric.getTotal),
         }),
       )
+      .filter((project) => project.total > 0) // Ignore projects with no data for this metric
       .sort((a, b) => b.total - a.total);
   }, [projects, callsByDeployment, metric]);
 }
@@ -438,10 +455,6 @@ function FunctionUsageBreakdownByProject({
 }) {
   const { deployments } = useDeployments(project?.id);
   const isLoadingDeployments = project && !deployments;
-
-  if (projectTotal === 0) {
-    return null;
-  }
 
   return (
     <div className="mb-4">
