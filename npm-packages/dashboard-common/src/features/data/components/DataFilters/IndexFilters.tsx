@@ -5,15 +5,14 @@ import { GenericDocument } from "convex/server";
 import { ValidatorJSON } from "convex/values";
 import {
   FilterByIndexRange,
-  FilterExpression,
+  DatabaseFilterExpression,
 } from "system-udfs/convex/_system/frontend/lib/filters";
 import { Button } from "@ui/Button";
 import { Combobox } from "@ui/Combobox";
 import { Tooltip } from "@ui/Tooltip";
-import { Popover } from "@ui/Popover";
 import { SchemaJson } from "@common/lib/format";
-import Link from "next/link";
 import { DeploymentInfoContext } from "@common/lib/deploymentContext";
+import { Index } from "@common/features/data/lib/api";
 import { IndexFilterEditor, IndexFilterState } from "./IndexFilterEditor";
 
 export function getDefaultIndex(): {
@@ -53,21 +52,31 @@ const DEFAULT_INDEX_NAME = "by_creation_time";
 const DEFAULT_INDEX_FIELD = "_creationTime";
 const DEFAULT_INDEX_LABEL = DEFAULT_INDEX_FIELD;
 
+const BY_ID_INDEX_NAME = "by_id";
+const BY_ID_INDEX_FIELD = "_id";
+const BY_ID_INDEX_LABEL = BY_ID_INDEX_FIELD;
+
 // Define the default index object to reuse throughout the component
 const DEFAULT_INDEX = {
   name: DEFAULT_INDEX_NAME,
   fields: [DEFAULT_INDEX_FIELD],
 };
 
+const BY_ID_INDEX = {
+  name: BY_ID_INDEX_NAME,
+  fields: [BY_ID_INDEX_FIELD],
+};
+
 type IndexFiltersProps = {
-  shownFilters: FilterExpression;
+  shownFilters: DatabaseFilterExpression;
   defaultDocument: GenericDocument;
-  indexes: any[] | undefined;
+  indexes: Index[] | undefined;
   tableName: string;
   activeSchema: SchemaJson | null;
   getValidatorForField: (fieldName?: string) => ValidatorJSON | undefined;
-  onChangeFilters: (next: FilterExpression) => void;
-  setDraftFilters: (next: FilterExpression) => void;
+  onFiltersChange: (next: DatabaseFilterExpression) => void;
+  applyFiltersWithHistory: (next: DatabaseFilterExpression) => Promise<void>;
+  setDraftFilters: (next: DatabaseFilterExpression) => void;
   onChangeOrder: (newOrder: "asc" | "desc") => void;
   onChangeIndexFilter: (filter: IndexFilterState, idx: number) => void;
   onError: (idx: number, errors: string[]) => void;
@@ -83,7 +92,8 @@ export function IndexFilters({
   tableName,
   activeSchema,
   getValidatorForField,
-  onChangeFilters,
+  onFiltersChange,
+  applyFiltersWithHistory,
   setDraftFilters,
   onChangeOrder,
   onChangeIndexFilter,
@@ -96,7 +106,8 @@ export function IndexFilters({
   // Restructure indexOptions to use the Option<IndexOptionValue> type
   const indexOptions = indexes
     ? [
-        // Add the default option
+        // Add the by_id system index
+        // Add the default by_creation_time index
         {
           value: {
             name: DEFAULT_INDEX.name,
@@ -104,12 +115,16 @@ export function IndexFilters({
           },
           label: DEFAULT_INDEX_LABEL,
         },
-        // Add other indexes with array fields
+        {
+          value: {
+            name: BY_ID_INDEX.name,
+            fields: BY_ID_INDEX.fields,
+          },
+          label: BY_ID_INDEX_LABEL,
+        },
+        // Add other user indexes with array fields
         ...indexes
-          .filter((index) => {
-            const simpleIndex = index as unknown as SimpleIndex;
-            return Array.isArray(simpleIndex.fields);
-          })
+          .filter((index) => Array.isArray(index.fields) && !index.staged)
           .map((index) => {
             const simpleIndex = index as unknown as SimpleIndex;
             return {
@@ -123,8 +138,6 @@ export function IndexFilters({
       ]
     : [];
 
-  const hasUsableIndexes = indexOptions.length > 1; // More than just the default _creationTime index
-
   const selectedTableIndex = indexes?.find(
     (index) => index.name === shownFilters.index?.name,
   );
@@ -132,114 +145,73 @@ export function IndexFilters({
   return (
     <>
       <div className="mb-1 flex items-center gap-1.5">
-        {hasUsableIndexes ? (
-          <Combobox
-            size="sm"
-            label="Sort by Index"
-            options={indexOptions}
-            buttonClasses="w-fit"
-            buttonProps={{
-              tip: "Use an index to sort your data and improve filter performance.",
-              tipSide: "right",
-            }}
-            innerButtonClasses="text-xs w-fit pl-1"
-            selectedOption={
-              indexOptions.find(
-                (o) => o.value.name === shownFilters.index?.name,
-              )?.value || {
-                name: DEFAULT_INDEX.name,
-                fields: DEFAULT_INDEX.fields,
-              }
+        <Combobox
+          size="sm"
+          label="Sort by Index"
+          options={indexOptions}
+          buttonClasses="w-fit"
+          buttonProps={{
+            tip: "Use an index to sort your data and improve filter performance.",
+            tipSide: "right",
+          }}
+          innerButtonClasses="text-xs w-fit pl-1"
+          selectedOption={
+            indexOptions.find((o) => o.value.name === shownFilters.index?.name)
+              ?.value || {
+              name: DEFAULT_INDEX.name,
+              fields: DEFAULT_INDEX.fields,
             }
-            setSelectedOption={(option: IndexOptionValue | null) => {
-              if (!option) {
-                return;
-              }
+          }
+          setSelectedOption={(option: IndexOptionValue | null) => {
+            if (!option) {
+              return;
+            }
 
-              log("sort by index combobox opened", {
-                selectedOption: option.name,
-              });
+            log("sort by index combobox opened", {
+              selectedOption: option.name,
+            });
 
-              // Clear all errors for the existing index filters
-              shownFilters.index?.clauses.forEach((_, idx) => {
-                onError(idx, []);
-              });
+            // Clear all errors for the existing index filters
+            shownFilters.index?.clauses.forEach((_, idx) => {
+              onError(idx, []);
+            });
 
-              const newFilters = {
-                ...shownFilters,
-                index: {
-                  name: option.name,
-                  clauses: option.fields.map((field: string) => ({
-                    type: "indexEq",
-                    enabled: false,
-                    value:
-                      field === "_creationTime"
-                        ? new Date().getTime()
+            const newFilters = {
+              ...shownFilters,
+              index: {
+                name: option.name,
+                clauses: option.fields.map((field: string) => ({
+                  type: "indexEq",
+                  enabled: false,
+                  value:
+                    field === "_creationTime"
+                      ? new Date().getTime()
+                      : field === "_id"
+                        ? ""
                         : defaultDocument[field],
-                  })),
-                },
-              } as FilterExpression;
-              setDraftFilters(newFilters);
-              onChangeFilters(newFilters);
-            }}
-            Option={({ inButton, label, value }) => (
-              <div className="flex items-center gap-1 text-xs">
-                {inButton && (
-                  <>
-                    <FingerPrintIcon className="size-4" />
-                    Index:
-                  </>
-                )}
-                <span>{label}</span>
-                {!inButton && (
-                  <span className="text-xs text-content-secondary">
-                    ({value.fields.join(", ")})
-                  </span>
-                )}
-              </div>
-            )}
-          />
-        ) : (
-          <Popover
-            button={
-              <Button
-                size="xs"
-                variant="neutral"
-                className="w-fit text-xs"
-                icon={<FingerPrintIcon className="size-4" />}
-                onClick={() => log("viewed sort by index empty state")}
-              >
-                Index: {DEFAULT_INDEX_LABEL}
-              </Button>
-            }
-            openButtonClassName="*:bg-background-tertiary"
-            className="max-w-md"
-            placement="bottom-start"
-          >
-            <div className="flex flex-col gap-3">
-              <h5 className="font-semibold">No Indexes!</h5>
-              <p className="max-w-prose text-xs">
-                This table does not have any standard indexes beyond the default{" "}
-                index on _creationTime.
-              </p>
-              <p className="max-w-prose text-xs">
-                Indexes allow you to sort and filter your data efficiently.
-                They're especially helpful for tables with a lot of documents.
-              </p>
-              <p className="max-w-prose text-xs">
-                Once you create an index, you'll be able to use it to sort and
-                filter your data on this page.
-              </p>
-              <Link
-                href="https://docs.convex.dev/database/reading-data/indexes/"
-                className="text-xs text-content-link hover:underline"
-                target="_blank"
-              >
-                Learn more about indexes.
-              </Link>
+                })),
+              },
+            } as DatabaseFilterExpression;
+            setDraftFilters(newFilters);
+            onFiltersChange(newFilters);
+          }}
+          Option={({ inButton, label, value }) => (
+            <div className="flex items-center gap-1 text-xs">
+              {inButton && (
+                <>
+                  <FingerPrintIcon className="size-4" />
+                  Index:
+                </>
+              )}
+              <span>{label}</span>
+              {!inButton && (
+                <span className="text-xs text-content-secondary">
+                  ({value.fields.join(", ")})
+                </span>
+              )}
             </div>
-          </Popover>
-        )}
+          )}
+        />
         <Button
           variant="neutral"
           size="xs"
@@ -283,9 +255,11 @@ export function IndexFilters({
               ? selectedTableIndex.fields[idx]
               : "_creationTime";
 
-          // Special case for _creationTime index
-          if (indexName === "_creationTime") {
+          // Special case for system indexes
+          if (indexName === "by_creation_time") {
             fieldName = "_creationTime";
+          } else if (indexName === "by_id") {
+            fieldName = "_id";
           } else {
             const indexDef = tableIndexes.find((i: any) => {
               const simpleIndex = i as unknown as SimpleIndex;
@@ -319,11 +293,11 @@ export function IndexFilters({
                 clause.enabled ? invalidFilters[`index/${idx}`] : undefined
               }
               onChange={onChangeIndexFilter}
-              onApplyFilters={() => {
+              onApplyFilters={async () => {
                 if (hasInvalidFilters) {
                   return;
                 }
-                onChangeFilters(shownFilters);
+                await applyFiltersWithHistory(shownFilters);
               }}
               onError={onError}
               filter={clause}

@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use common::{
     bootstrap_model::index::{
         database_index::{
-            DeveloperDatabaseIndexConfig,
+            DatabaseIndexSpec,
             IndexedFields,
         },
         IndexConfig,
@@ -390,7 +390,7 @@ impl TransactionIndex {
     ) -> anyhow::Result<PreloadedIndexRange> {
         let index = self.require_enabled(reads, tablet_index_name, printable_index_name)?;
         let IndexConfig::Database {
-            developer_config: DeveloperDatabaseIndexConfig { ref fields, .. },
+            spec: DatabaseIndexSpec { ref fields, .. },
             ..
         } = index.metadata().config
         else {
@@ -761,6 +761,21 @@ impl TransactionTextSnapshot for TextIndexManagerSnapshot {
     }
 }
 
+pub struct SearchNotEnabled;
+
+#[async_trait]
+impl TransactionTextSnapshot for SearchNotEnabled {
+    async fn search(
+        &self,
+        _index: &Index,
+        _search: &InternalSearch,
+        _version: SearchVersion,
+        _pending_updates: &Vec<DocumentUpdate>,
+    ) -> anyhow::Result<QueryResults> {
+        anyhow::bail!("search not implemented in db-info")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -790,6 +805,7 @@ mod tests {
             ConflictStrategy,
             DocumentLogEntry,
             Persistence,
+            PersistenceIndexEntry,
             RepeatablePersistence,
         },
         query::{
@@ -865,7 +881,7 @@ mod tests {
         BTreeMap<TabletIndexName, ResolvedDocumentId>,
     )> {
         let mut index_id_by_name = BTreeMap::new();
-        let mut index_documents = BTreeMap::new();
+        let mut index_documents = Vec::new();
 
         let index_table = id_generator.system_table_id(&INDEX_TABLE).tablet_id;
         // Add the _index.by_id index.
@@ -877,12 +893,12 @@ mod tests {
         for metadata in indexes {
             let doc = gen_index_document(id_generator, metadata.clone())?;
             index_id_by_name.insert(metadata.name.clone(), doc.id());
-            index_documents.insert(doc.id(), (ts, PackedDocument::pack(&doc)));
+            index_documents.push((ts, PackedDocument::pack(&doc)));
         }
 
         let index_registry = IndexRegistry::bootstrap(
             id_generator,
-            index_documents.values().map(|(_, d)| d.clone()),
+            index_documents.iter().map(|(_, d)| d.clone()),
             PersistenceVersion::default(),
         )?;
         let index = BackendInMemoryIndexes::bootstrap(&index_registry, index_documents, ts)?;
@@ -958,7 +974,7 @@ mod tests {
                 Ok(_) => panic!("Should have failed!"),
                 Err(ref err) => {
                     assert!(
-                        format!("{:?}", err).contains("Index messages.by_name not found."),
+                        format!("{err:?}").contains("Index messages.by_name not found."),
                         "Actual: {err:?}"
                     )
                 },
@@ -989,8 +1005,7 @@ mod tests {
             Ok(_) => panic!("Should have failed!"),
             Err(ref err) => {
                 assert!(
-                    format!("{:?}", err)
-                        .contains("Index messages.by_name is currently backfilling"),
+                    format!("{err:?}").contains("Index messages.by_name is currently backfilling"),
                     "Actual: {err:?}"
                 )
             },
@@ -1073,7 +1088,7 @@ mod tests {
             match result {
                 Ok(_) => panic!("Should have failed!"),
                 Err(ref err) => {
-                    assert!(format!("{:?}", err).contains("Index messages.by_name not found."),)
+                    assert!(format!("{err:?}").contains("Index messages.by_name not found."),)
                 },
             };
         }
@@ -1182,7 +1197,10 @@ mod tests {
                         prev_ts: None,
                     }),
                 ],
-                index_updates.into_iter().map(|u| (ts, u)).collect(),
+                index_updates
+                    .into_iter()
+                    .map(|u| PersistenceIndexEntry::from_index_update(ts, u))
+                    .collect(),
                 ConflictStrategy::Error,
             )
             .await?;

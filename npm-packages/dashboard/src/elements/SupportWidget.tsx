@@ -1,4 +1,3 @@
-import { useUser } from "@auth0/nextjs-auth0/client";
 import {
   ChatBubbleIcon,
   ChevronLeftIcon,
@@ -20,6 +19,7 @@ import { useProfile } from "api/profile";
 import { useAuthHeader } from "hooks/fetching";
 import { createGlobalState } from "react-use";
 import * as Yup from "yup";
+import { useWorkOS } from "hooks/useWorkOS";
 
 export const useSupportFormOpen = createGlobalState<
   { defaultMessage: string; defaultSubject: string } | boolean
@@ -28,7 +28,7 @@ export const useSupportFormOpen = createGlobalState<
 export function SupportWidget() {
   const team = useCurrentTeam();
   const { subscription } = useTeamOrbSubscription(team?.id);
-  const { user } = useUser();
+  const { user } = useWorkOS();
   const [openState, setOpenState] = useSupportFormOpen();
 
   const canSubmitTicket =
@@ -39,7 +39,7 @@ export function SupportWidget() {
 
   return (
     <Sheet
-      className="absolute bottom-0 z-50 w-screen animate-fadeInFromLoading p-4 shadow-2xl transition-all sm:bottom-8 sm:right-8 sm:w-[24rem]"
+      className="absolute bottom-0 z-50 w-screen animate-fadeInFromLoading p-4 shadow-2xl transition-all sm:right-8 sm:bottom-8 sm:w-[24rem]"
       padding={false}
     >
       {openState === true ? (
@@ -91,7 +91,7 @@ export function SupportWidget() {
               File a support ticket{" "}
               {!canSubmitTicket && (
                 <span
-                  className="w-fit rounded-sm bg-util-accent px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-white"
+                  className="w-fit rounded-sm bg-util-accent px-1.5 py-0.5 text-xs font-semibold tracking-wider text-white uppercase"
                   title="Only available on the Pro plan"
                 >
                   Pro

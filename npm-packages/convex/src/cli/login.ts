@@ -1,12 +1,11 @@
 import { Command, Option } from "@commander-js/extra-typings";
+import { Context, oneoffContext } from "../bundler/context.js";
+import { logFailure, logFinishedStep, logMessage } from "../bundler/log.js";
 import {
-  Context,
-  logFailure,
-  logFinishedStep,
-  logMessage,
-  oneoffContext,
-} from "../bundler/context.js";
-import { checkAuthorization, performLogin } from "./lib/login.js";
+  checkAuthorization,
+  performLogin,
+  getTeamsForUser,
+} from "./lib/login.js";
 import { loadUuidForAnonymousUser } from "./lib/localDeployment/filePaths.js";
 import {
   handleLinkToProject,
@@ -28,6 +27,47 @@ import {
   shouldAllowAnonymousDevelopment,
 } from "./lib/deploymentSelection.js";
 import { removeAnonymousPrefix } from "./lib/deployment.js";
+import {
+  readGlobalConfig,
+  globalConfigPath,
+} from "./lib/utils/globalConfig.js";
+
+const loginStatus = new Command("status")
+  .description("Check login status and list accessible teams")
+  .allowExcessArguments(false)
+  .action(async () => {
+    const ctx = await oneoffContext({
+      url: undefined,
+      adminKey: undefined,
+      envFile: undefined,
+    });
+
+    const globalConfig = readGlobalConfig(ctx);
+    const hasToken = globalConfig?.accessToken !== null;
+
+    if (hasToken) {
+      logMessage(`Convex account token found in: ${globalConfigPath()}`);
+    } else {
+      logMessage("No token found locally");
+      return;
+    }
+
+    const isLoggedIn = await checkAuthorization(ctx, false);
+
+    if (!isLoggedIn) {
+      logMessage("Status: Not logged in");
+      return;
+    }
+
+    logMessage("Status: Logged in");
+    const teams = await getTeamsForUser(ctx);
+    logMessage(
+      `Teams: ${teams.length} team${teams.length === 1 ? "" : "s"} accessible`,
+    );
+    for (const team of teams) {
+      logMessage(`  - ${team.name} (${team.slug})`);
+    }
+  });
 
 export const login = new Command("login")
   .description("Login to Convex")
@@ -67,6 +107,8 @@ export const login = new Command("login")
   .addOption(new Option("--dump-access-token").hideHelp())
   // Hidden option for tests to check if the user is logged in.
   .addOption(new Option("--check-login").hideHelp())
+  .addCommand(loginStatus)
+  .addHelpCommand(false)
   .action(async (options, cmd: Command) => {
     const ctx = await oneoffContext({
       url: undefined,
@@ -78,7 +120,6 @@ export const login = new Command("login")
       (await checkAuthorization(ctx, !!options.acceptOptIns))
     ) {
       logFinishedStep(
-        ctx,
         "This device has previously been authorized and is ready for use with Convex.",
       );
       await handleLinkingDeployments(ctx, {
@@ -127,7 +168,6 @@ async function handleLinkingDeployments(
   if (anonymousDeployments.length === 0) {
     if (args.interactive) {
       logMessage(
-        ctx,
         "It doesn't look like you have any deployments to link. You can run `npx convex dev` to set up a new project or select an existing one.",
       );
     }
@@ -144,11 +184,9 @@ async function handleLinkingDeployments(
     });
     if (!createProjects) {
       logMessage(
-        ctx,
         "Not linking your existing deployments. If you want to link them later, run `npx convex login --link-deployments`.",
       );
       logMessage(
-        ctx,
         `Visit ${DASHBOARD_HOST} or run \`npx convex dev\` to get started with your new account.`,
       );
       return;
@@ -162,7 +200,6 @@ async function handleLinkingDeployments(
     const projectsRemaining = await getProjectsRemaining(ctx, teamSlug);
     if (anonymousDeployments.length > projectsRemaining) {
       logFailure(
-        ctx,
         `You have ${anonymousDeployments.length} deployments to link, but only have ${projectsRemaining} projects remaining. If you'd like to choose which ones to link, run this command with the --link-deployments flag.`,
       );
       return;
@@ -187,7 +224,6 @@ async function handleLinkingDeployments(
         projectSlug: null,
       });
       logFinishedStep(
-        ctx,
         `Added ${deployment.deploymentName} to project ${linkedDeployment.projectSlug}`,
       );
       if (deployment.deploymentName === configuredDeployment) {
@@ -211,7 +247,6 @@ async function handleLinkingDeployments(
       }
     }
     logFinishedStep(
-      ctx,
       `Sucessfully linked your deployments! Visit ${dashboardUrl} to get started.`,
     );
     return;
@@ -228,7 +263,6 @@ async function handleLinkingDeployments(
       : null;
   while (true) {
     logMessage(
-      ctx,
       getDeploymentListMessage(
         anonymousDeployments.map((d) => d.deploymentName),
       ),
@@ -258,7 +292,6 @@ async function handleLinkingDeployments(
       projectSlug,
     });
     logFinishedStep(
-      ctx,
       `Added ${deploymentToLink} to project ${linkedDeployment.projectSlug}`,
     );
     if (deploymentToLink === configuredDeployment) {
@@ -288,7 +321,7 @@ async function getProjectsRemaining(ctx: Context, teamSlug: string) {
   const response = await bigBrainAPI<{ projectsRemaining: number }>({
     ctx,
     method: "GET",
-    url: `/api/teams/${teamSlug}/projects_remaining`,
+    url: `teams/${teamSlug}/projects_remaining`,
   });
 
   return response.projectsRemaining;

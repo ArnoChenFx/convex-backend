@@ -51,6 +51,9 @@ run_persistence_test_suite!(
             allow_read_only: false,
             version: PersistenceVersion::V5,
             schema: None,
+            skip_index_creation: false,
+            instance_name: "test".into(),
+            multitenant: false,
         },
         ShutdownSignal::panic()
     )
@@ -61,11 +64,48 @@ run_persistence_test_suite!(
             allow_read_only: true,
             version: PersistenceVersion::V5,
             schema: None,
+            skip_index_creation: false,
+            instance_name: "test".into(),
+            multitenant: false,
         },
         ShutdownSignal::panic()
     )
     .await?
 );
+
+mod multitenant {
+    use super::*;
+    run_persistence_test_suite!(
+        db,
+        crate::itest::new_db_opts().await?,
+        PostgresPersistence::new(
+            &db,
+            PostgresOptions {
+                allow_read_only: false,
+                version: PersistenceVersion::V5,
+                schema: None,
+                instance_name: "test".into(),
+                multitenant: true,
+                skip_index_creation: false,
+            },
+            ShutdownSignal::panic()
+        )
+        .await?,
+        PostgresPersistence::new(
+            &db,
+            PostgresOptions {
+                allow_read_only: true,
+                version: PersistenceVersion::V5,
+                schema: None,
+                instance_name: "test".into(),
+                multitenant: true,
+                skip_index_creation: false,
+            },
+            ShutdownSignal::panic()
+        )
+        .await?
+    );
+}
 
 mod with_non_default_schema {
     use super::*;
@@ -78,6 +118,9 @@ mod with_non_default_schema {
                 allow_read_only: false,
                 version: PersistenceVersion::V5,
                 schema: Some("foobar".to_owned()),
+                instance_name: "test".into(),
+                multitenant: false,
+                skip_index_creation: false,
             },
             ShutdownSignal::panic()
         )
@@ -88,6 +131,9 @@ mod with_non_default_schema {
                 allow_read_only: true,
                 version: PersistenceVersion::V5,
                 schema: Some("foobar".to_owned()),
+                instance_name: "test".into(),
+                multitenant: false,
+                skip_index_creation: false,
             },
             ShutdownSignal::panic()
         )
@@ -101,6 +147,9 @@ async fn test_loading_locally() -> anyhow::Result<()> {
         allow_read_only: false,
         version: PersistenceVersion::V5,
         schema: None,
+        skip_index_creation: false,
+        instance_name: "test".into(),
+        multitenant: false,
     };
     let persistence = PostgresPersistence::new(
         &crate::itest::new_db_opts().await?,
@@ -143,6 +192,9 @@ async fn test_writing_locally() -> anyhow::Result<()> {
         allow_read_only: false,
         version: PersistenceVersion::V5,
         schema: None,
+        skip_index_creation: false,
+        instance_name: "test".into(),
+        multitenant: false,
     };
     let persistence = PostgresPersistence::new(
         &crate::itest::new_db_opts().await?,
@@ -200,6 +252,9 @@ async fn test_lease_preempt() -> anyhow::Result<()> {
         allow_read_only: false,
         version: PersistenceVersion::default(),
         schema: None,
+        skip_index_creation: false,
+        instance_name: "test".into(),
+        multitenant: false,
     };
     let p1 = Arc::new(PostgresPersistence::new(&url, options, ShutdownSignal::no_op()).await?);
 
@@ -230,6 +285,9 @@ async fn test_lease_preempt() -> anyhow::Result<()> {
         allow_read_only: false,
         version: PersistenceVersion::V5,
         schema: None,
+        skip_index_creation: false,
+        instance_name: "test".into(),
+        multitenant: false,
     };
     let p2 = PostgresPersistence::new(&url, options, ShutdownSignal::no_op()).await?;
 

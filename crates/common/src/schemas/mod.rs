@@ -55,6 +55,8 @@ use crate::{
 };
 
 pub mod json;
+#[cfg(any(test, feature = "testing"))]
+pub mod test_helpers;
 #[cfg(test)]
 mod tests;
 pub mod validator;
@@ -169,8 +171,11 @@ macro_rules! db_schema {
                     let table_def = $crate::schemas::TableDefinition {
                         table_name: table_name.clone(),
                         indexes: Default::default(),
-                        search_indexes: Default::default(),
+                        staged_db_indexes: Default::default(),
+                        text_indexes: Default::default(),
+                        staged_text_indexes: Default::default(),
                         vector_indexes: Default::default(),
+                        staged_vector_indexes: Default::default(),
                         document_type: Some($document_schema),
                     };
                     tables.insert(table_name, table_def);
@@ -200,8 +205,11 @@ macro_rules! db_schema_not_validated {
                     let table_def = $crate::schemas::TableDefinition {
                         table_name: table_name.clone(),
                         indexes: Default::default(),
-                        search_indexes: Default::default(),
+                        staged_db_indexes: Default::default(),
+                        text_indexes: Default::default(),
+                        staged_text_indexes: Default::default(),
                         vector_indexes: Default::default(),
+                        staged_vector_indexes: Default::default(),
                         document_type: Some($document_schema),
                     };
                     tables.insert(table_name, table_def);
@@ -217,57 +225,6 @@ macro_rules! db_schema_not_validated {
 
 pub const VECTOR_DIMENSIONS: u32 = 1536;
 
-#[macro_export]
-// Turns a mapping of tableName => (index_name, vector_field) into a
-// DatabaseSchema struct.
-macro_rules! db_schema_with_vector_indexes {
-    ($($table:expr => {
-        $document_schema:expr, [$(($index_name:expr, $vector_field:expr)),*]
-    }),* $(,)?) => {
-        {
-            #[allow(unused)]
-            use std::str::FromStr;
-            #[allow(unused)]
-            let mut tables = std::collections::BTreeMap::new();
-            {
-                $(
-                    let table_name: $crate::types::TableName =
-                        str::parse($table)?;
-                    #[allow(unused)]
-                    let mut vector_indexes = std::collections::BTreeMap::new();
-                    $(
-                        let index_name = $crate::types::IndexName::new(
-                            str::parse($table)?,
-                            $crate::types::IndexDescriptor::new($index_name)?
-                        )?;
-                        vector_indexes.insert(
-                            index_name.descriptor().clone(),
-                            $crate::schemas::VectorIndexSchema::new(
-                                index_name.descriptor().clone(),
-                                value::FieldPath::from_str($vector_field)?,
-                                1536u32.try_into()?,
-                                Default::default(),
-                            )?,
-                        );
-                    )*
-                    let table_def = $crate::schemas::TableDefinition {
-                        table_name: table_name.clone(),
-                        indexes: Default::default(),
-                        search_indexes: Default::default(),
-                        vector_indexes,
-                        document_type: Some($document_schema),
-                    };
-                    tables.insert(table_name, table_def);
-                )*
-            }
-            $crate::schemas::DatabaseSchema {
-                tables,
-                schema_validation: true,
-            }
-        }
-    };
-}
-
 impl DatabaseSchema {
     pub fn tables_to_validate<'a, C: ShapeConfig, S: ShapeCounter, F>(
         new_schema: &'a DatabaseSchema,
@@ -280,6 +237,7 @@ impl DatabaseSchema {
         F: Fn(&TableName) -> Option<Shape<C, S>>,
     {
         if !new_schema.schema_validation {
+            tracing::info!("Schema validation is disabled, no tables to check");
             return Ok(BTreeSet::new());
         }
 
@@ -321,6 +279,11 @@ impl DatabaseSchema {
         };
         let enforced_schema_validator: Validator = enforced_schema.into();
         if enforced_schema_validator.is_subset(&next_schema_validator) {
+            tracing::debug!(
+                "Skipping validation for table {} because its schema is a subset of the enforced \
+                 schema",
+                table_name
+            );
             return Ok(false);
         }
 
@@ -332,6 +295,11 @@ impl DatabaseSchema {
                 .filter_top_level_system_fields()
                 .is_subset(&next_schema_validator)
             {
+                tracing::debug!(
+                    "Skipping validation for table {} because its shape matches the schema
+                     ",
+                    table_name
+                );
                 return Ok(false);
             }
         }
@@ -532,8 +500,11 @@ impl proptest::arbitrary::Arbitrary for DatabaseSchema {
 pub struct TableDefinition {
     pub table_name: TableName,
     pub indexes: BTreeMap<IndexDescriptor, IndexSchema>,
-    pub search_indexes: BTreeMap<IndexDescriptor, SearchIndexSchema>,
+    pub staged_db_indexes: BTreeMap<IndexDescriptor, IndexSchema>,
+    pub text_indexes: BTreeMap<IndexDescriptor, TextIndexSchema>,
+    pub staged_text_indexes: BTreeMap<IndexDescriptor, TextIndexSchema>,
     pub vector_indexes: BTreeMap<IndexDescriptor, VectorIndexSchema>,
+    pub staged_vector_indexes: BTreeMap<IndexDescriptor, VectorIndexSchema>,
     pub document_type: Option<DocumentSchema>, /* FIXME: `Option` could be removed here, since
                                                 * `None` is handled the same way as
                                                 * `Some(DocumentSchema::Any)`. */
@@ -546,6 +517,7 @@ impl TableDefinition {
         let index_fields = self
             .indexes
             .iter()
+            .chain(self.staged_db_indexes.iter())
             .flat_map(|(index_descriptor, index_schema)| {
                 index_schema
                     .fields
@@ -553,34 +525,37 @@ impl TableDefinition {
                     .map(move |field_path| (index_descriptor, field_path))
             });
 
-        let search_index_fields =
-            self.search_indexes
-                .iter()
-                .map(|(index_descriptor, search_index_schema)| {
-                    (index_descriptor, (&search_index_schema.search_field))
-                });
+        let text_index_fields = self
+            .text_indexes
+            .iter()
+            .chain(self.staged_text_indexes.iter())
+            .map(|(index_descriptor, search_index_schema)| {
+                (index_descriptor, (&search_index_schema.search_field))
+            });
 
-        let search_index_filter_fields =
-            self.search_indexes
-                .iter()
-                .flat_map(|(index_descriptor, search_index_schema)| {
-                    search_index_schema
-                        .filter_fields
-                        .iter()
-                        .map(move |field_path| (index_descriptor, field_path))
-                });
+        let text_index_filter_fields = self
+            .text_indexes
+            .iter()
+            .chain(self.staged_text_indexes.iter())
+            .flat_map(|(index_descriptor, search_index_schema)| {
+                search_index_schema
+                    .filter_fields
+                    .iter()
+                    .map(move |field_path| (index_descriptor, field_path))
+            });
 
         let vector_index_fields = self.vector_fields();
 
         index_fields
-            .chain(search_index_fields)
-            .chain(search_index_filter_fields)
+            .chain(text_index_fields)
+            .chain(text_index_filter_fields)
             .chain(vector_index_fields)
     }
 
     pub fn vector_fields(&self) -> impl Iterator<Item = (&IndexDescriptor, &FieldPath)> {
         self.vector_indexes
             .iter()
+            .chain(self.staged_vector_indexes.iter())
             .map(|(index_descriptor, vector_index_schema)| {
                 (index_descriptor, (&vector_index_schema.vector_field))
             })
@@ -598,7 +573,10 @@ impl proptest::arbitrary::Arbitrary for TableDefinition {
 
         (
             prop::collection::vec(any::<IndexSchema>(), 0..6),
-            prop::collection::vec(any::<SearchIndexSchema>(), 0..3),
+            prop::collection::vec(any::<IndexSchema>(), 0..6),
+            prop::collection::vec(any::<TextIndexSchema>(), 0..3),
+            prop::collection::vec(any::<TextIndexSchema>(), 0..3),
+            prop::collection::vec(any::<VectorIndexSchema>(), 0..3),
             prop::collection::vec(any::<VectorIndexSchema>(), 0..3),
             any_with::<Option<DocumentSchema>>((
                 prop::option::Probability::default(),
@@ -607,14 +585,30 @@ impl proptest::arbitrary::Arbitrary for TableDefinition {
         )
             .prop_filter_map(
                 "index names must be unique",
-                move |(indexes, search_indexes, vector_indexes, document_type)| {
+                move |(
+                    indexes,
+                    staged_db_indexes,
+                    search_indexes,
+                    staged_search_indexes,
+                    vector_indexes,
+                    staged_vector_indexes,
+                    document_type,
+                )| {
                     let index_descriptors: BTreeSet<_> = indexes
                         .iter()
                         .map(|i| &i.index_descriptor)
+                        .chain(staged_db_indexes.iter().map(|i| &i.index_descriptor))
                         .chain(search_indexes.iter().map(|i| &i.index_descriptor))
+                        .chain(staged_search_indexes.iter().map(|i| &i.index_descriptor))
                         .chain(vector_indexes.iter().map(|i| &i.index_descriptor))
+                        .chain(staged_vector_indexes.iter().map(|i| &i.index_descriptor))
                         .collect();
-                    let expected = indexes.len() + search_indexes.len() + vector_indexes.len();
+                    let expected = indexes.len()
+                        + staged_db_indexes.len()
+                        + search_indexes.len()
+                        + staged_search_indexes.len()
+                        + vector_indexes.len()
+                        + staged_vector_indexes.len();
                     assert!(index_descriptors.len() <= expected);
                     if index_descriptors.len() == expected {
                         Some(Self {
@@ -623,11 +617,23 @@ impl proptest::arbitrary::Arbitrary for TableDefinition {
                                 .into_iter()
                                 .map(|i| (i.index_descriptor.clone(), i))
                                 .collect(),
-                            search_indexes: search_indexes
+                            staged_db_indexes: staged_db_indexes
+                                .into_iter()
+                                .map(|i| (i.index_descriptor.clone(), i))
+                                .collect(),
+                            text_indexes: search_indexes
+                                .into_iter()
+                                .map(|i| (i.index_descriptor.clone(), i))
+                                .collect(),
+                            staged_text_indexes: staged_search_indexes
                                 .into_iter()
                                 .map(|i| (i.index_descriptor.clone(), i))
                                 .collect(),
                             vector_indexes: vector_indexes
+                                .into_iter()
+                                .map(|i| (i.index_descriptor.clone(), i))
+                                .collect(),
+                            staged_vector_indexes: staged_vector_indexes
                                 .into_iter()
                                 .map(|i| (i.index_descriptor.clone(), i))
                                 .collect(),
@@ -656,7 +662,7 @@ impl Display for IndexSchema {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(any(test, feature = "testing"), derive(proptest_derive::Arbitrary))]
-pub struct SearchIndexSchema {
+pub struct TextIndexSchema {
     pub index_descriptor: IndexDescriptor,
     pub search_field: FieldPath,
     #[cfg_attr(
@@ -669,7 +675,7 @@ pub struct SearchIndexSchema {
     _pd: PhantomData<()>,
 }
 
-impl SearchIndexSchema {
+impl TextIndexSchema {
     pub fn new(
         index_descriptor: IndexDescriptor,
         search_field: FieldPath,

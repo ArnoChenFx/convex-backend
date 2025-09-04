@@ -18,7 +18,6 @@ use backoff::{
 };
 use big_brain_client::BigBrainClient;
 use big_brain_private_api_types::{
-    types::PartitionId,
     DeploymentAuthPreviewArgs,
     DeploymentAuthProdArgs,
     DeploymentAuthResponse,
@@ -284,14 +283,9 @@ async fn deployment_credentials(
                 .await
         },
         DeploymentSelector::Prod => {
-            let partition_id = env::var("PARTITION_ID")
-                .ok()
-                .map(|s| anyhow::Ok(PartitionId(s.parse::<u64>()?)))
-                .transpose()?;
             client
                 .prod_deployment_credentials(DeploymentAuthProdArgs {
                     deployment_name: configured_deployment_name,
-                    partition_id,
                 })
                 .await
         },
@@ -311,10 +305,7 @@ async fn preview_deploy_key(
         .get_project_and_team_for_deployment(deployment_name.clone())
         .await?;
     let prod_credentials = client
-        .prod_deployment_credentials(DeploymentAuthProdArgs {
-            deployment_name,
-            partition_id: None,
-        })
+        .prod_deployment_credentials(DeploymentAuthProdArgs { deployment_name })
         .await?;
 
     let admin_key_parts = prod_credentials.admin_key.split_once('|');
@@ -367,7 +358,7 @@ fn start_local_funrun(
         Command::new(funrun_binary)
             .arg("--register-database")
             .arg(format!(
-                "local=sqlite://{}",
+                "local=sqlite=sqlite://{}",
                 db_path.to_str().expect("Invalid db path")
             ))
             .arg("--metrics-addr")
@@ -421,10 +412,7 @@ async fn provision(
             )
         },
         BackendProvisioner::ConductorDebug | BackendProvisioner::ConductorRelease => {
-            let release = matches!(
-                backend_provisioner,
-                BackendProvisioner::ConductorRelease { .. }
-            );
+            let release = matches!(backend_provisioner, BackendProvisioner::ConductorRelease);
             let mut build_cmd = Command::new("cargo");
             build_cmd.arg("build").arg("--bin").arg("conductor");
             let udf_use_funrun = env_config("UDF_USE_FUNRUN", true);
@@ -503,10 +491,7 @@ async fn provision(
             )
         },
         BackendProvisioner::OpenSourceDebug | BackendProvisioner::OpenSourceRelease => {
-            let release = matches!(
-                backend_provisioner,
-                BackendProvisioner::OpenSourceRelease { .. }
-            );
+            let release = matches!(backend_provisioner, BackendProvisioner::OpenSourceRelease);
             let mut cmd = Command::new("cargo");
             cmd.arg("build").arg("--bin").arg("convex-local-backend");
             if release {
@@ -687,9 +672,6 @@ async fn provision_from_big_brain(
                     .arg("--configure=new")
                     .arg("--project")
                     .arg("load_generator");
-                if let Ok(partition_id) = env::var("PARTITION_ID") {
-                    cmd.arg("--partition-id").arg(partition_id);
-                }
                 logs.spawn_with_prefixed_logs(
                     "npx convex dev --configure=new".into(),
                     cmd.env("CONVEX_PROVISION_HOST", provision_host)
@@ -711,9 +693,6 @@ async fn provision_from_big_brain(
                     .arg("deploy")
                     .arg("--preview-create")
                     .arg(identifier);
-                if let Ok(partition_id) = env::var("PARTITION_ID") {
-                    cmd.arg("--partition-id").arg(partition_id);
-                }
                 logs.spawn_with_prefixed_logs(
                     format!("npx convex deploy --preview-create {identifier}"),
                     cmd.env("CONVEX_PROVISION_HOST", provision_host)
@@ -783,10 +762,6 @@ async fn deploy(
                     .arg("--yes")
                     .env("CONVEX_PROVISION_HOST", provision_host)
                     .env("CONVEX_OVERRIDE_ACCESS_TOKEN", access_token);
-                if let Ok(partition_id) = env::var("PARTITION_ID") {
-                    tracing::info!("Using partition_id: {partition_id}");
-                    cmd.arg("--partition-id").arg(partition_id);
-                }
                 cmd
             },
             // Only pass the ADMIN_KEY in directly with local backend to bypass dependency on

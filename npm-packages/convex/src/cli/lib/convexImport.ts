@@ -5,16 +5,16 @@ import {
   deploymentFetch,
   logAndHandleFetchError,
 } from "./utils/utils.js";
+import { Context } from "../../bundler/context.js";
 import {
   logFailure,
-  Context,
   showSpinner,
   logFinishedStep,
   logWarning,
   logMessage,
   stopSpinner,
   changeSpinner,
-} from "../../bundler/context.js";
+} from "../../bundler/log.js";
 import path from "path";
 import { subscribe } from "./run.js";
 import { ConvexHttpClient } from "../../browser/http_client.js";
@@ -95,7 +95,7 @@ export async function importIntoDeployment(
   }
 
   const fileStats = ctx.fs.stat(filePath);
-  showSpinner(ctx, `Importing ${filePath} (${formatSize(fileStats.size)})`);
+  showSpinner(`Importing ${filePath} (${formatSize(fileStats.size)})`);
 
   let mode = "requireEmpty";
   if (options.append) {
@@ -114,7 +114,6 @@ export async function importIntoDeployment(
   const tableNotice = tableName ? ` to table "${chalk.bold(tableName)}"` : "";
   const onFailure = async () => {
     logFailure(
-      ctx,
       `Importing data from "${chalk.bold(
         filePath,
       )}"${tableNotice}${options.deploymentNotice} failed`,
@@ -127,18 +126,18 @@ export async function importIntoDeployment(
     importArgs,
     onImportFailed: onFailure,
   });
-  changeSpinner(ctx, "Parsing uploaded data");
+  changeSpinner("Parsing uploaded data");
   const onProgress = (
     ctx: Context,
     state: InProgressImportState,
     checkpointCount: number,
   ) => {
-    stopSpinner(ctx);
+    stopSpinner();
     while ((state.checkpoint_messages?.length ?? 0) > checkpointCount) {
-      logFinishedStep(ctx, state.checkpoint_messages![checkpointCount]);
+      logFinishedStep(state.checkpoint_messages![checkpointCount]);
       checkpointCount += 1;
     }
-    showSpinner(ctx, state.progress_message ?? "Importing");
+    showSpinner(state.progress_message ?? "Importing");
     return checkpointCount;
   };
   while (true) {
@@ -151,7 +150,6 @@ export async function importIntoDeployment(
     switch (snapshotImportState.state) {
       case "completed":
         logFinishedStep(
-          ctx,
           `Added ${snapshotImportState.num_rows_written} documents${tableNotice}${options.deploymentNotice}.`,
         );
         return;
@@ -165,21 +163,20 @@ export async function importIntoDeployment(
         });
       case "waiting_for_confirmation": {
         // Clear spinner state so we can log and prompt without clobbering lines.
-        stopSpinner(ctx);
+        stopSpinner();
         await askToConfirmImport(
           ctx,
           snapshotImportState.message_to_confirm,
           snapshotImportState.require_manual_confirmation,
           options.yes,
         );
-        showSpinner(ctx, `Importing`);
+        showSpinner(`Importing`);
         await confirmImport(ctx, {
           importId,
           adminKey: options.adminKey,
           deploymentUrl: options.deploymentUrl,
           onError: async () => {
             logFailure(
-              ctx,
               `Importing data from "${chalk.bold(
                 filePath,
               )}"${tableNotice}${options.deploymentNotice} failed`,
@@ -207,7 +204,7 @@ export async function importIntoDeployment(
         });
       }
       default: {
-        const _: never = snapshotImportState;
+        snapshotImportState satisfies never;
         return await ctx.crash({
           exitCode: 1,
           errorType: "fatal",
@@ -228,7 +225,7 @@ async function askToConfirmImport(
   if (!messageToConfirm?.length) {
     return;
   }
-  logMessage(ctx, messageToConfirm);
+  logMessage(messageToConfirm);
   if (requireManualConfirmation !== false && !yes) {
     const confirmed = await promptYesNo(ctx, {
       message: "Perform import?",
@@ -253,7 +250,6 @@ async function askToConfirmImportWithExistingImports(
     ? ` You can view its progress at ${snapshotImportDashboardLink}.`
     : "";
   logMessage(
-    ctx,
     `There is already a snapshot import in progress.${atDashboardLink}`,
   );
   if (yes) {
@@ -358,7 +354,6 @@ async function determineFormat(
     );
     if (format !== null && fileExtension !== formatToExtension[format]) {
       logWarning(
-        ctx,
         chalk.yellow(
           `Warning: Extension of file ${filePath} (${fileExtension}) does not match specified format: ${format} (${formatToExtension[format]}).`,
         ),
@@ -432,11 +427,13 @@ export async function uploadForImport(
   if (chunkSize < minChunkSize) {
     chunkSize = minChunkSize;
   }
-  const data = ctx.fs.createReadStream(filePath, {
+  const data: AsyncIterable<Buffer> & {
+    bytesRead: number;
+  } = ctx.fs.createReadStream(filePath, {
     highWaterMark: chunkSize,
   });
 
-  showSpinner(ctx, `Importing ${filePath} (${formatSize(fileStats.size)})`);
+  showSpinner(`Importing ${filePath} (${formatSize(fileStats.size)})`);
   let importId: string;
   try {
     const startResp = await fetch("/api/import/start_upload", {
@@ -448,6 +445,13 @@ export async function uploadForImport(
     let partNumber = 1;
 
     for await (const chunk of data) {
+      // Strip BOM markers from the first chunk.
+      // Note that we don’t have to worry about the BOM marker being split in multiple chunks:
+      // the chunk size is controlled by `highWaterMark`, so the first chunk will always be larger
+      // than 3 bytes (except for smaller files).
+      const chunkWithoutBom =
+        partNumber === 1 && hasBomMarker(chunk) ? chunk.subarray(3) : chunk;
+
       const partUrl = `/api/import/upload_part?uploadToken=${encodeURIComponent(
         uploadToken,
       )}&partNumber=${partNumber}`;
@@ -455,13 +459,12 @@ export async function uploadForImport(
         headers: {
           "Content-Type": "application/octet-stream",
         },
-        body: chunk,
+        body: chunkWithoutBom,
         method: "POST",
       });
       partTokens.push(await partResp.json());
       partNumber += 1;
       changeSpinner(
-        ctx,
         `Uploading ${filePath} (${formatSize(data.bytesRead)}/${formatSize(
           fileStats.size,
         )})`,
@@ -483,4 +486,13 @@ export async function uploadForImport(
     return await logAndHandleFetchError(ctx, e);
   }
   return importId;
+}
+
+function hasBomMarker(chunk: Buffer) {
+  return (
+    chunk.length >= 3 &&
+    chunk[0] === 0xef &&
+    chunk[1] === 0xbb &&
+    chunk[2] === 0xbf
+  );
 }

@@ -141,7 +141,7 @@ impl TextIndexManager {
     fn require_ready_indexes(&self) -> anyhow::Result<&OrdMap<IndexId, TextIndex>> {
         match self.indexes {
             TextIndexManagerState::Bootstrapping => {
-                anyhow::bail!(ErrorMetadata::overloaded(
+                anyhow::bail!(ErrorMetadata::feature_temporarily_unavailable(
                     "SearchIndexesUnavailable",
                     "Search indexes bootstrapping and not yet available for use"
                 ));
@@ -365,13 +365,21 @@ impl TextIndexManager {
                                     ..
                                 },
                                 IndexConfig::Text {
-                                    on_disk_state: TextIndexState::Backfilled(snapshot),
+                                    on_disk_state:
+                                        TextIndexState::Backfilled {
+                                            snapshot,
+                                            staged: _,
+                                        },
                                     ..
                                 },
                             ) => (None, Some(snapshot)),
                             (
                                 IndexConfig::Text {
-                                    on_disk_state: TextIndexState::Backfilled(old_snapshot),
+                                    on_disk_state:
+                                        TextIndexState::Backfilled {
+                                            snapshot: old_snapshot,
+                                            staged: _,
+                                        },
                                     ..
                                 },
                                 IndexConfig::Text {
@@ -381,11 +389,19 @@ impl TextIndexManager {
                             ) => (Some(old_snapshot), Some(new_snapshot)),
                             (
                                 IndexConfig::Text {
-                                    on_disk_state: TextIndexState::Backfilled(old_snapshot),
+                                    on_disk_state:
+                                        TextIndexState::Backfilled {
+                                            snapshot: old_snapshot,
+                                            staged: _,
+                                        },
                                     ..
                                 },
                                 IndexConfig::Text {
-                                    on_disk_state: TextIndexState::Backfilled(new_snapshot),
+                                    on_disk_state:
+                                        TextIndexState::Backfilled {
+                                            snapshot: new_snapshot,
+                                            staged: _,
+                                        },
                                     ..
                                 },
                             ) => (Some(old_snapshot), Some(new_snapshot)),
@@ -399,6 +415,27 @@ impl TextIndexManager {
                                     ..
                                 },
                             ) => (Some(old_snapshot), Some(new_snapshot)),
+                            (
+                                IndexConfig::Text {
+                                    on_disk_state: TextIndexState::SnapshottedAt(old_snapshot),
+                                    ..
+                                },
+                                IndexConfig::Text {
+                                    on_disk_state:
+                                        TextIndexState::Backfilled {
+                                            snapshot: new_snapshot,
+                                            staged,
+                                        },
+                                    ..
+                                },
+                            ) => {
+                                anyhow::ensure!(
+                                    old_snapshot == new_snapshot,
+                                    "Snapshot mismatch when disabling text index"
+                                );
+                                anyhow::ensure!(staged, "Disabled text index must be staged");
+                                (Some(old_snapshot), Some(new_snapshot))
+                            },
                             (IndexConfig::Text { .. }, _) | (_, IndexConfig::Text { .. }) => {
                                 anyhow::bail!(
                                     "Invalid index type transition: {prev_metadata:?} to \
@@ -484,14 +521,10 @@ impl TextIndexManager {
 
         // Handle index updates for our existing search indexes.
         for index in index_registry.text_indexes_by_table(id.tablet_id) {
-            let IndexConfig::Text {
-                ref developer_config,
-                ..
-            } = index.metadata.config
-            else {
+            let IndexConfig::Text { ref spec, .. } = index.metadata.config else {
                 continue;
             };
-            let tantivy_schema = TantivySearchIndexSchema::new(developer_config);
+            let tantivy_schema = TantivySearchIndexSchema::new(spec);
             let Some(index) = indexes.get_mut(&index.id()) else {
                 continue;
             };

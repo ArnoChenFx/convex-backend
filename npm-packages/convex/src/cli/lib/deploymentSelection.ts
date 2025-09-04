@@ -1,4 +1,5 @@
-import { BigBrainAuth, Context, logVerbose } from "../../bundler/context.js";
+import { BigBrainAuth, Context } from "../../bundler/context.js";
+import { logVerbose } from "../../bundler/log.js";
 import {
   AccountRequiredDeploymentType,
   DeploymentType,
@@ -10,11 +11,12 @@ import {
   deploymentTypeFromAdminKey,
   getDeploymentTypeFromConfiguredDeployment,
   isAnonymousDeployment,
+  isDeploymentKey,
   isPreviewDeployKey,
   isProjectKey,
   stripDeploymentTypePrefix,
 } from "./deployment.js";
-import { buildEnvironment } from "./envvars.js";
+import { getBuildEnvironment } from "./envvars.js";
 import { readGlobalConfig } from "./utils/globalConfig.js";
 import {
   CONVEX_DEPLOYMENT_ENV_VAR_NAME,
@@ -35,8 +37,11 @@ import * as dotenv from "dotenv";
  * * An access token (corresponds to device authorization, usually stored in `~/.convex/config.json`)
  * * A preview deploy key (set via the `CONVEX_DEPLOY_KEY` environment variable)
  * * A project key (set via the `CONVEX_DEPLOY_KEY` environment variable)
+ * * A deployment key if a deployment key (set via `CONVEX_DEPLOY_KEY` environment variable)
  *
  * Project keys take precedence over the the access token.
+ * Deployment keys take precedence over the the access token.
+ * This makes using one of these keys while logged in or logged out work the same.
  *
  * We check for the `CONVEX_DEPLOY_KEY` in the `--env-file` if it's provided.
  * Otherwise, we check in the `.env` and `.env.local` files.
@@ -62,6 +67,7 @@ export async function initializeBigBrainAuth(
       getBigBrainAuth(ctx, {
         previewDeployKey: null,
         projectKey: null,
+        deploymentKey: null,
       }),
     );
     return;
@@ -83,6 +89,7 @@ export async function initializeBigBrainAuth(
       const bigBrainAuth = getBigBrainAuth(ctx, {
         previewDeployKey: isPreviewDeployKey(deployKey) ? deployKey : null,
         projectKey: isProjectKey(deployKey) ? deployKey : null,
+        deploymentKey: isDeploymentKey(deployKey) ? deployKey : null,
       });
       ctx._updateBigBrainAuth(bigBrainAuth);
     }
@@ -95,6 +102,7 @@ export async function initializeBigBrainAuth(
     const bigBrainAuth = getBigBrainAuth(ctx, {
       previewDeployKey: isPreviewDeployKey(deployKey) ? deployKey : null,
       projectKey: isProjectKey(deployKey) ? deployKey : null,
+      deploymentKey: isDeploymentKey(deployKey) ? deployKey : null,
     });
     ctx._updateBigBrainAuth(bigBrainAuth);
     return;
@@ -103,6 +111,7 @@ export async function initializeBigBrainAuth(
     getBigBrainAuth(ctx, {
       previewDeployKey: null,
       projectKey: null,
+      deploymentKey: null,
     }),
   );
   return;
@@ -115,7 +124,6 @@ export async function updateBigBrainAuthAfterLogin(
   const existingAuth = ctx.bigBrainAuth();
   if (existingAuth !== null && existingAuth.kind === "projectKey") {
     logVerbose(
-      ctx,
       `Ignoring update to big brain auth since project key takes precedence`,
     );
     return;
@@ -136,6 +144,7 @@ function getBigBrainAuth(
   opts: {
     previewDeployKey: string | null;
     projectKey: string | null;
+    deploymentKey: string | null;
   },
 ): BigBrainAuth | null {
   if (process.env.CONVEX_OVERRIDE_ACCESS_TOKEN) {
@@ -151,6 +160,14 @@ function getBigBrainAuth(
       header: `Bearer ${opts.projectKey}`,
       kind: "projectKey",
       projectKey: opts.projectKey,
+    };
+  }
+  if (opts.deploymentKey !== null) {
+    // Deployment keys take precedence over global config.
+    return {
+      header: `Bearer ${opts.deploymentKey}`,
+      kind: "deploymentKey",
+      deploymentKey: opts.deploymentKey,
     };
   }
   const globalConfig = readGlobalConfig(ctx);
@@ -256,36 +273,33 @@ function logDeploymentSelection(ctx: Context, selection: DeploymentSelection) {
   switch (selection.kind) {
     case "existingDeployment": {
       logVerbose(
-        ctx,
         `Existing deployment: ${selection.deploymentToActOn.url} ${selection.deploymentToActOn.source}`,
       );
       break;
     }
     case "deploymentWithinProject": {
       logVerbose(
-        ctx,
         `Deployment within project: ${prettyProjectSelection(selection.targetProject)}`,
       );
       break;
     }
     case "preview": {
-      logVerbose(ctx, `Preview deploy key`);
+      logVerbose(`Preview deploy key`);
       break;
     }
     case "chooseProject": {
-      logVerbose(ctx, `Choose project`);
+      logVerbose(`Choose project`);
       break;
     }
     case "anonymous": {
       logVerbose(
-        ctx,
         `Anonymous, has selected deployment?: ${selection.deploymentName !== null}`,
       );
       break;
     }
     default: {
-      const _exhaustivenessCheck: never = selection;
-      logVerbose(ctx, `Unknown deployment selection`);
+      selection satisfies never;
+      logVerbose(`Unknown deployment selection`);
     }
   }
   return null;
@@ -303,7 +317,7 @@ function prettyProjectSelection(selection: ProjectSelection) {
       return `Project deploy key`;
     }
     default: {
-      const _exhaustivenessCheck: never = selection;
+      selection satisfies never;
       return `Unknown`;
     }
   }
@@ -335,7 +349,7 @@ async function _getDeploymentSelection(
 
   if (cliArgs.envFile) {
     // If an `--env-file` is specified, it must contain enough information for both auth and deployment selection.
-    logVerbose(ctx, `Checking env file: ${cliArgs.envFile}`);
+    logVerbose(`Checking env file: ${cliArgs.envFile}`);
     const existingFile = ctx.fs.exists(cliArgs.envFile)
       ? ctx.fs.readUtf8File(cliArgs.envFile)
       : null;
@@ -483,7 +497,7 @@ async function getDeploymentSelectionFromEnv(
         };
       }
       default: {
-        const _exhaustivenessCheck: never = deployKeyType;
+        deployKeyType satisfies never;
         return ctx.crash({
           exitCode: 1,
           errorType: "fatal",
@@ -492,8 +506,6 @@ async function getDeploymentSelectionFromEnv(
       }
     }
   }
-  // Throw a nice error if we're in something like a CI environment where we need a `CONVEX_DEPLOY_KEY`
-  await checkIfBuildEnvironmentExpectsConvexDeployKey(ctx);
 
   const convexDeployment = getEnv(CONVEX_DEPLOYMENT_ENV_VAR_NAME);
   const selfHostedUrl = getEnv(CONVEX_SELF_HOSTED_URL_VAR_NAME);
@@ -561,18 +573,24 @@ async function getDeploymentSelectionFromEnv(
     };
   }
 
+  // Throw a nice error if we're in something like a CI environment where we need a valid deployment configuration
+  await checkIfBuildEnvironmentRequiresDeploymentConfig(ctx);
+
   return { kind: "unknown" };
 }
 
-async function checkIfBuildEnvironmentExpectsConvexDeployKey(ctx: Context) {
-  const buildEnvironmentExpectsConvexDeployKey = buildEnvironment();
-  if (buildEnvironmentExpectsConvexDeployKey) {
+async function checkIfBuildEnvironmentRequiresDeploymentConfig(ctx: Context) {
+  const buildEnvironment = getBuildEnvironment();
+  if (buildEnvironment) {
     return await ctx.crash({
       exitCode: 1,
       errorType: "fatal",
       printedMessage:
-        `${buildEnvironmentExpectsConvexDeployKey} build environment detected but ${CONVEX_DEPLOY_KEY_ENV_VAR_NAME} is not set. ` +
-        `Set this environment variable to deploy from this environment. See https://docs.convex.dev/production/hosting`,
+        `${buildEnvironment} build environment detected but no Convex deployment configuration found.\n` +
+        `Set one of:\n` +
+        `  • ${CONVEX_DEPLOY_KEY_ENV_VAR_NAME} for Convex Cloud deployments\n` +
+        `  • ${CONVEX_SELF_HOSTED_URL_VAR_NAME} and ${CONVEX_SELF_HOSTED_ADMIN_KEY_VAR_NAME} for self-hosted deployments\n` +
+        `See https://docs.convex.dev/production/hosting or https://docs.convex.dev/self-hosting`,
     });
   }
 }
@@ -617,7 +635,7 @@ export const deploymentNameAndTypeFromSelection = (
       return null;
     }
   }
-  const _exhaustivenessCheck: never = selection;
+  selection satisfies never;
   return null;
 };
 

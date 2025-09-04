@@ -15,7 +15,7 @@ import {
   useConfigurePeriodicBackup,
 } from "api/backups";
 import { useCurrentProject } from "api/projects";
-import { useId, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import {
   DeploymentResponse,
   Team,
@@ -67,7 +67,7 @@ export function Backups({
           </Link>
         </span>
       </div>
-      <div className="flex grow flex-col gap-8 overflow-auto pl-1 pt-1 scrollbar lg:flex-row lg:overflow-hidden">
+      <div className="scrollbar flex grow flex-col gap-8 overflow-auto pt-1 pl-1 lg:flex-row lg:overflow-hidden">
         <div className="flex shrink-0 flex-col lg:w-60">
           {periodicBackupsEnabled ? (
             <AutomaticBackupSelector
@@ -84,7 +84,7 @@ export function Backups({
                 Backup automatically
               </label>
               <span
-                className="rounded-sm bg-util-accent px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-white"
+                className="rounded-sm bg-util-accent px-1.5 py-0.5 text-xs font-semibold tracking-wider text-white uppercase"
                 title="Only available on the Pro plan"
               >
                 Pro
@@ -206,7 +206,12 @@ function AutomaticBackupSelector({
               try {
                 if (periodicBackup === null) {
                   // Enable automatic backups
-                  const defaultCronspec = "0 0 * * *";
+
+                  // We randomize the default cron spec to spread out the backups
+                  // of users that don’t specify a custom time
+                  const randomHour = Math.floor(Math.random() * 24);
+                  const randomMinute = Math.floor(Math.random() * 60);
+                  const defaultCronspec = `${randomMinute} ${randomHour} * * *`;
                   await configurePeriodicBackup({ cronspec: defaultCronspec });
                 } else {
                   // Disable automatic backups
@@ -261,6 +266,13 @@ export function BackupScheduleSelector({
   const [minutesUtc, hoursUtc, , , dayOfWeekPart = "*"] = parts;
   const isWeekly = dayOfWeekPart !== "*";
   const dayOfWeekNum = isWeekly ? Number(dayOfWeekPart) : null;
+  const defaultDayOfWeek = useMemo(
+    () =>
+      // We randomize the default day of week to spread out the backups
+      // of users that don’t specify a custom time
+      Math.floor(Math.random() * 7),
+    [],
+  );
   const date = new Date();
   date.setUTCHours(+hoursUtc, +minutesUtc);
 
@@ -269,7 +281,7 @@ export function BackupScheduleSelector({
       button={
         <Button
           variant="neutral"
-          className="relative w-full pl-3 pr-10 font-normal"
+          className="relative w-full pr-10 pl-3 font-normal"
           disabled={disabled}
         >
           <span className="flex flex-col truncate">
@@ -307,7 +319,7 @@ export function BackupScheduleSelector({
         <BackupScheduleSelectorInner
           defaultValue={date}
           defaultPeriodicity={isWeekly ? "weekly" : "daily"}
-          defaultDayOfWeek={dayOfWeekNum ?? 0}
+          defaultDayOfWeek={dayOfWeekNum ?? defaultDayOfWeek}
           onClose={close}
           deployment={deployment}
         />

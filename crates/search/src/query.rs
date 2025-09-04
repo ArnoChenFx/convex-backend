@@ -809,16 +809,15 @@ impl<T: Clone + Ord> SearchTermTries<T> {
 
     #[fastrace::trace]
     fn overlaps_document<'a>(&'a self, document: &'a PackedDocument) -> bool {
-        let mut result = BTreeSet::new();
-
         for (path, tries) in self.terms.iter() {
             let Some(ConvexValue::String(document_text)) = document.value().get_path(path) else {
                 continue;
             };
 
             let tokens = tokenize(document_text);
-            tries.matching_values(&tokens, &mut result);
-            if !result.is_empty() {
+            let mut overlaps = false;
+            tries.matching_values(&tokens, &mut |_| overlaps = true);
+            if overlaps {
                 return true;
             }
         }
@@ -834,9 +833,9 @@ impl<T: Clone + Ord> SearchTermTries<T> {
         let Some(tries) = self.terms.get(&index_key_value.search_field) else {
             return false;
         };
-        let mut result = BTreeSet::new();
-        tries.matching_values(tokens, &mut result);
-        !result.is_empty()
+        let mut overlaps = false;
+        tries.matching_values(tokens, &mut |_| overlaps = true);
+        overlaps
     }
 
     fn extend(&mut self, value: T, queries: &WithHeapSize<Vec<TextQueryTermRead>>) {
@@ -867,11 +866,11 @@ impl<T: Clone + Ord> SearchTermTries<T> {
             let tries = self
                 .terms
                 .get_mut(path)
-                .unwrap_or_else(|| panic!("Missing tries for {}", path));
+                .unwrap_or_else(|| panic!("Missing tries for {path}"));
             let trie = tries
                 .tries
                 .get_mut(&(prefix, max_distance))
-                .unwrap_or_else(|| panic!("Missing trie for ({}, {})", prefix, max_distance));
+                .unwrap_or_else(|| panic!("Missing trie for ({prefix}, {max_distance})"));
             let value_to_count = trie
                 .get_mut(token)
                 .unwrap_or_else(|| panic!("Missing values for a token of length {}", token.len()));
@@ -910,14 +909,16 @@ impl<T: Clone> Tries<T> {
 }
 
 impl<T: Clone + Ord> Tries<T> {
-    fn matching_values(&self, tokens: &SearchValueTokens, result: &mut BTreeSet<T>) {
+    fn matching_values(&self, tokens: &SearchValueTokens, result: &mut impl FnMut(T)) {
         for ((prefix, _max_distance), trie) in self.tries.iter() {
             // Prefixing is handled by constructing prefix tokens in ValueTokens (see the
             // notes there), so we can get away with a symmetric search where the dfa's
             // prefix is always set to false.
             tokens.for_each_token(*prefix, |token| {
                 if let Some(value) = trie.get(token) {
-                    result.extend(value.keys().cloned());
+                    for key in value.keys() {
+                        result(key.clone());
+                    }
                 }
             });
         }
@@ -1020,6 +1021,14 @@ impl TextSearchSubscriptions {
         }
     }
 
+    pub fn filter_len(&self) -> usize {
+        self.filter_conditions.values().map(|m| m.len()).sum()
+    }
+
+    pub fn fuzzy_len(&self) -> usize {
+        self.fuzzy_searches.len()
+    }
+
     pub fn insert(&mut self, id: SubscriberId, index: &TabletIndexName, reads: &QueryReads) {
         self.filter_conditions
             .entry(index.clone())
@@ -1037,7 +1046,7 @@ impl TextSearchSubscriptions {
         let conditions = self
             .filter_conditions
             .get_mut(index)
-            .unwrap_or_else(|| panic!("Missing condition index entry for {}", index));
+            .unwrap_or_else(|| panic!("Missing condition index entry for {index}"));
         assert!(conditions.remove(&id).is_some());
         if conditions.is_empty() {
             self.filter_conditions.remove(index);
@@ -1045,7 +1054,7 @@ impl TextSearchSubscriptions {
         let terms = self
             .fuzzy_searches
             .get_mut(index)
-            .unwrap_or_else(|| panic!("Missing fuzzy search index entry for {}", index));
+            .unwrap_or_else(|| panic!("Missing fuzzy search index entry for {index}"));
         terms.remove(id, &reads.text_queries);
     }
 
@@ -1053,17 +1062,17 @@ impl TextSearchSubscriptions {
         &self,
         document_id: &ResolvedDocumentId,
         document_index_keys: &DocumentIndexKeys,
-        to_notify: &mut BTreeSet<SubscriberId>,
+        notify: &mut impl FnMut(SubscriberId),
     ) {
-        self.add_filter_conditions_matches(document_id, document_index_keys, to_notify);
-        self.add_fuzzy_matches(document_id, document_index_keys, to_notify);
+        self.add_filter_conditions_matches(document_id, document_index_keys, notify);
+        self.add_fuzzy_matches(document_id, document_index_keys, notify);
     }
 
     fn add_filter_conditions_matches(
         &self,
         document_id: &ResolvedDocumentId,
         document_index_keys: &DocumentIndexKeys,
-        to_notify: &mut BTreeSet<SubscriberId>,
+        notify: &mut impl FnMut(SubscriberId),
     ) {
         for (index, filter_conditions_map) in &self.filter_conditions {
             if *index.table() != document_id.tablet_id {
@@ -1086,7 +1095,7 @@ impl TextSearchSubscriptions {
 
                     if document_value == filter_value {
                         metrics::log_query_reads_outcome(true);
-                        to_notify.insert(*subscriber_id);
+                        notify(*subscriber_id);
                     }
                 }
             }
@@ -1104,7 +1113,7 @@ impl TextSearchSubscriptions {
         &self,
         document_id: &ResolvedDocumentId,
         document_index_keys: &DocumentIndexKeys,
-        matches: &mut BTreeSet<SubscriberId>,
+        matches: &mut impl FnMut(SubscriberId),
     ) {
         for (index, fuzzy_terms) in self
             .fuzzy_searches
@@ -1271,7 +1280,9 @@ mod tests {
 
         // Test matching
         let mut matches = BTreeSet::new();
-        subscriptions.add_fuzzy_matches(&ResolvedDocumentId::MIN, &keys_matching, &mut matches);
+        subscriptions.add_fuzzy_matches(&ResolvedDocumentId::MIN, &keys_matching, &mut |id| {
+            matches.insert(id);
+        });
         assert!(matches.contains(&subscriber_id));
 
         // Test non-matching
@@ -1282,7 +1293,9 @@ mod tests {
         );
 
         let mut matches = BTreeSet::new();
-        subscriptions.add_fuzzy_matches(&ResolvedDocumentId::MIN, &keys_non_matching, &mut matches);
+        subscriptions.add_fuzzy_matches(&ResolvedDocumentId::MIN, &keys_non_matching, &mut |id| {
+            matches.insert(id);
+        });
         assert!(matches.is_empty());
 
         Ok(())
@@ -1308,7 +1321,9 @@ mod tests {
         let index_keys = DocumentIndexKeys::empty_for_test();
 
         let mut matches = BTreeSet::new();
-        subscriptions.add_fuzzy_matches(&ResolvedDocumentId::MIN, &index_keys, &mut matches);
+        subscriptions.add_fuzzy_matches(&ResolvedDocumentId::MIN, &index_keys, &mut |id| {
+            matches.insert(id);
+        });
         assert!(matches.is_empty());
 
         Ok(())

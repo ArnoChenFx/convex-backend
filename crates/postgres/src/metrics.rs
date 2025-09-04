@@ -248,40 +248,31 @@ pub fn retention_validate_timer() -> StatusTimer {
     StatusTimer::new(&POSTGRES_RETENTION_VALIDATE_SECONDS)
 }
 
+// This can't really be split between documents and indexes because of
+// pipelining
 register_convex_histogram!(
-    POSTGRES_INSERT_CHUNK_SECONDS,
-    "Time to insert a chunk of documents",
+    POSTGRES_INSERT_SECONDS,
+    "Time to insert documents & indexes",
     &STATUS_LABEL
 );
-pub fn insert_document_chunk_timer() -> StatusTimer {
-    StatusTimer::new(&POSTGRES_INSERT_CHUNK_SECONDS)
+pub fn insert_timer() -> StatusTimer {
+    StatusTimer::new(&POSTGRES_INSERT_SECONDS)
 }
 
 register_convex_histogram!(
-    POSTGRES_INSERT_ONE_SECONDS,
-    "Time to insert one document",
-    &STATUS_LABEL
+    POSTGRES_WRITE_BYTES,
+    "Number of bytes written in Postgres writes"
 );
-pub fn insert_one_document_timer() -> StatusTimer {
-    StatusTimer::new(&POSTGRES_INSERT_ONE_SECONDS)
+pub fn log_write_bytes(size: usize) {
+    log_distribution(&POSTGRES_WRITE_BYTES, size as f64);
 }
 
 register_convex_histogram!(
-    POSTGRES_INSERT_INDEX_CHUNK_SECONDS,
-    "Time to insert an index chunk",
-    &STATUS_LABEL
+    POSTGRES_WRITE_DOCUMENTS,
+    "Number of documents written in Postgres writes",
 );
-pub fn insert_index_chunk_timer() -> StatusTimer {
-    StatusTimer::new(&POSTGRES_INSERT_INDEX_CHUNK_SECONDS)
-}
-
-register_convex_histogram!(
-    POSTGRES_INSERT_ONE_INDEX_SECONDS,
-    "Time to insert one index",
-    &STATUS_LABEL
-);
-pub fn insert_one_index_timer() -> StatusTimer {
-    StatusTimer::new(&POSTGRES_INSERT_ONE_INDEX_SECONDS)
+pub fn log_write_documents(size: usize) {
+    log_distribution(&POSTGRES_WRITE_DOCUMENTS, size as f64);
 }
 
 register_convex_histogram!(
@@ -390,4 +381,18 @@ register_convex_counter!(
 );
 pub fn log_transaction(labels: Vec<StaticMetricLabel>) {
     log_counter_with_labels(&POSTGRES_TRANSACTION_TOTAL, 1, labels)
+}
+
+register_convex_counter!(
+    POSTGRES_IMPORT_BATCH_ROWS,
+    "Number of rows batch-imported into a Postgres database",
+    &["target"]
+);
+
+pub fn log_import_batch_rows(rows: usize, target: &'static str) {
+    log_counter_with_labels(
+        &POSTGRES_IMPORT_BATCH_ROWS,
+        rows as u64,
+        vec![StaticMetricLabel::new("target", target)],
+    )
 }

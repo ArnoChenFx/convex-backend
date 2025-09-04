@@ -12,7 +12,6 @@ use common::{
         Persistence,
     },
     schemas::DatabaseSchema,
-    version::Version,
 };
 use database::{
     text_index_worker::flusher::backfill_text_indexes,
@@ -45,76 +44,45 @@ use crate::{
 macro_rules! expect_diff {
     (
         $diff:expr;
-        added: [$(($at:expr, $ai:expr, $af:expr)),*],
-        dropped: [$(($dt:expr, $di:expr, $df:expr)),*]
+        $(added: [$(($at:expr, $ai:expr, $af:expr)),*$(,)?]$(,)?)?
+        $(dropped: [$(($dt:expr, $di:expr, $df:expr)),*$(,)?]$(,)?)?
+        $(enabled: [$(($et:expr, $ei:expr, $ef:expr)),*$(,)?]$(,)?)?
+        $(disabled: [$(($dit:expr, $dii:expr, $dif:expr)),*$(,)?]$(,)?)?
     ) => {
         let added_descriptors = vec![
-            $((
+            $($((
                 new_index_descriptor($at, $ai)?,
                 $af.into_iter().map(|str| str.to_string()).collect(),
-            ),)*
+            ),)*)?
         ];
         let dropped_descriptors = vec![
-            $((
+            $($((
                 new_index_descriptor($dt, $di)?,
                 $df.into_iter().map(|str| str.to_string()).collect()
-            ),)*
+            ),)*)?
+        ];
+        let enabled_descriptors = vec![
+            $($((
+                new_index_descriptor($et, $ei)?,
+                $ef.into_iter().map(|str| str.to_string()).collect()
+            ),)*)?
+        ];
+        let disabled_descriptors = vec![
+            $($((
+                new_index_descriptor($dit, $dii)?,
+                $dif.into_iter().map(|str| str.to_string()).collect()
+            ),)*)?
         ];
         assert_eq!(
             database::test_helpers::index_utils::index_descriptors_and_fields(&$diff),
-            vec![added_descriptors, dropped_descriptors]
+            vec![added_descriptors, dropped_descriptors, enabled_descriptors, disabled_descriptors]
         );
+    };
+    ($diff:expr) => {
+        expect_diff!($diff;)
     };
 }
 pub(crate) use expect_diff;
-
-// Turns a mapping of tableName => (index_name, vec![index_fields]) into a
-// DatabaseSchema struct.
-macro_rules! db_schema_with_indexes {
-    ($($table:expr => [$(($index_name:expr, $fields:expr)),*]),* $(,)?) => {
-        {
-            #[allow(unused)]
-            let mut tables = std::collections::BTreeMap::new();
-            {
-                $(
-                    let table_name: common::types::TableName = str::parse($table)?;
-                    #[allow(unused)]
-                    let mut indexes = std::collections::BTreeMap::new();
-                    $(
-                        let index_name = database::test_helpers::index_utils::new_index_name(
-                            $table,
-                            $index_name,
-                        )?;
-                        let field_paths: Vec<common::paths::FieldPath> = $fields
-                            .iter()
-                            .map(|s| str::parse(s).unwrap())
-                            .collect();
-                        indexes.insert(
-                            index_name.descriptor().clone(),
-                            common::schemas::IndexSchema {
-                                index_descriptor: index_name.descriptor().clone(),
-                                fields: field_paths.try_into()?,
-                            },
-                        );
-                    )*
-                    let table_def = common::schemas::TableDefinition {
-                        table_name: table_name.clone(),
-                        indexes,
-                        search_indexes: Default::default(),
-                        vector_indexes: Default::default(),
-                        document_type: None,
-                    };
-                    tables.insert(table_name, table_def);
-                )*
-            }
-            common::schemas::DatabaseSchema {
-                tables,
-                schema_validation: true,
-            }
-        }
-    };
-}
-pub(crate) use db_schema_with_indexes;
 
 use super::types::ConfigMetadata;
 
@@ -122,7 +90,7 @@ pub fn assert_root_cause_contains<T: Debug>(result: anyhow::Result<T>, expected:
     let error = result.unwrap_err();
     let root_cause = error.root_cause();
     assert!(
-        format!("{}", root_cause).contains(expected),
+        format!("{root_cause}").contains(expected),
         "Root cause \"{root_cause}\" does not contain expected string:\n\"{expected}\""
     );
 }
@@ -165,9 +133,6 @@ pub async fn apply_config(
     db: Database<TestRuntime>,
     schema_id: Option<ResolvedDocumentId>,
 ) -> anyhow::Result<()> {
-    // This is a kind of arbitrary version that supports schema validation. I'm not
-    // even sure that the value here matters at all.
-    let udf_server_version: Version = Version::parse("0.14.0")?;
     let config_metadata = ConfigMetadata {
         functions: "convex/".to_string(),
         auth_info: vec![],
@@ -178,7 +143,7 @@ pub async fn apply_config(
         .apply(
             config_metadata,
             vec![],
-            UdfConfig::new_for_test(db.runtime(), udf_server_version),
+            UdfConfig::new_for_test(db.runtime(), "1000.0.0".parse()?),
             None,
             BTreeMap::new(),
             schema_id,

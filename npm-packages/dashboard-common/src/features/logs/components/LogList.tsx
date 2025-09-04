@@ -34,6 +34,7 @@ import { ClosePanelButton } from "@ui/ClosePanelButton";
 import { CopyTextButton } from "@common/elements/CopyTextButton";
 import { TextInput } from "@ui/TextInput";
 import { MultiSelectValue } from "@ui/MultiSelectCombobox";
+import { LogListResources } from "@common/features/logs/components/LogListResources";
 
 export type LogListProps = {
   logs?: UdfLog[];
@@ -147,7 +148,7 @@ function WindowedLogList({
         outerRef={outerRef}
       />
       {interleavedLogs.length === 0 ? (
-        <div className="ml-2 mt-2 animate-fadeInFromLoading text-sm text-content-secondary">
+        <div className="mt-2 ml-2 animate-fadeInFromLoading text-sm text-content-secondary">
           {hasFilters && (
             <p className="mb-2 flex items-center gap-1">
               No logs match your filters{" "}
@@ -162,9 +163,9 @@ configure a log stream."
           <p className="animate-blink">Waiting for new logs...</p>
         </div>
       ) : (
-        <div className="grow rounded-b overflow-hidden">
+        <div className="grow overflow-hidden rounded-b">
           <InfiniteScrollList
-            className="bg-background-secondary scrollbar"
+            className="scrollbar bg-background-secondary"
             overscanCount={25}
             onScroll={onScroll}
             outerRef={outerRef}
@@ -358,22 +359,20 @@ function RequestIdLogs({
                   {/* Header */}
                   <div className="mb-1 px-6 pt-6">
                     <div className="flex items-center justify-between gap-4">
-                      <Dialog.Title as="h4">Request logs</Dialog.Title>
+                      <Dialog.Title as="h4" className="flex items-center gap-2">
+                        Request breakdown{" "}
+                        <CopyTextButton
+                          className="font-mono text-xs font-semibold"
+                          text={requestId.requestId}
+                        />
+                      </Dialog.Title>
                       <ClosePanelButton onClose={onClose} />
                     </div>
                   </div>
-
-                  <div className="mx-6 flex flex-col gap-2">
+                  <LogListResources logs={logs} />
+                  <div className="mx-6 mt-2 flex flex-col gap-2">
                     <LogToolbar
-                      firstItem={
-                        <span className="flex grow items-center gap-2 text-sm text-content-secondary">
-                          Logs filtered to request:{" "}
-                          <CopyTextButton
-                            className="font-mono text-xs font-semibold"
-                            text={requestId.requestId}
-                          />
-                        </span>
-                      }
+                      firstItem={<h5 className="grow">Logs</h5>}
                       functions={functions}
                       selectedFunctions={selectedFunctions}
                       setSelectedFunctions={setSelectedFunctions}
@@ -398,7 +397,7 @@ function RequestIdLogs({
                   {filteredLogs && filteredLogs.length > 0 ? (
                     <div className="mx-6 my-4 flex grow flex-col overflow-y-hidden rounded-sm border text-xs">
                       <RequestIdLogsHeader />
-                      <div className="flex grow flex-col divide-y overflow-y-auto font-mono scrollbar">
+                      <div className="scrollbar flex grow flex-col divide-y overflow-y-auto font-mono">
                         {filteredLogs.map((log, idx) => (
                           <LogListItem
                             key={idx}

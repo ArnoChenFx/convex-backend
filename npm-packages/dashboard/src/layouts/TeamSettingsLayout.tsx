@@ -7,7 +7,6 @@ import Head from "next/head";
 import React from "react";
 import { Team } from "generatedApi";
 import { SidebarLink } from "@common/elements/Sidebar";
-import { useLaunchDarkly } from "hooks/useLaunchDarkly";
 
 export function TeamSettingsLayout({
   page: selectedPage,
@@ -20,13 +19,13 @@ export function TeamSettingsLayout({
     | "billing"
     | "usage"
     | "audit-log"
+    | "referrals"
     | "access-tokens"
-    | "referrals";
+    | "applications";
   Component: React.FunctionComponent<{ team: Team }>;
   title: string;
 }) {
   const selectedTeam = useCurrentTeam();
-  const { referralsPage } = useLaunchDarkly();
 
   const auditLogsEnabled = useTeamEntitlements(
     selectedTeam?.id,
@@ -37,7 +36,9 @@ export function TeamSettingsLayout({
     "members",
     "billing",
     "usage",
-    ...(referralsPage ? ["referrals"] : []),
+    "referrals",
+    "access-tokens",
+    "applications",
   ];
 
   return (
@@ -88,8 +89,8 @@ export function TeamSettingsLayout({
               Audit Log
             </SidebarLink>
           </aside>
-          <div className="w-full overflow-y-auto scrollbar">
-            <div className="flex h-full max-w-[65rem] flex-col gap-6 p-6">
+          <div className="scrollbar w-full overflow-y-auto">
+            <div className="flex max-w-[65rem] flex-col gap-6 p-6">
               {selectedTeam ? (
                 <Component team={selectedTeam} key={selectedTeam.id} />
               ) : (

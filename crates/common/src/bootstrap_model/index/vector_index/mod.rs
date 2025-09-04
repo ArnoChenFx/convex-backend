@@ -13,8 +13,8 @@ pub use self::{
         MIN_VECTOR_DIMENSIONS,
     },
     index_config::{
-        DeveloperVectorIndexConfig,
-        SerializedDeveloperVectorIndexConfig,
+        SerializedVectorIndexSpec,
+        VectorIndexSpec,
     },
     index_snapshot::{
         VectorIndexSnapshot,
@@ -52,9 +52,9 @@ mod tests {
         #![proptest_config(ProptestConfig { cases: 64 * env_config("CONVEX_PROPTEST_MULTIPLIER", 1), failure_persistence: None, .. ProptestConfig::default() })]
 
         #[test]
-        fn test_developer_vector_index_config_roundtrips(v in any::<DeveloperVectorIndexConfig>()) {
+        fn test_developer_vector_index_config_roundtrips(v in any::<VectorIndexSpec>()) {
             assert_roundtrips::<
-                DeveloperVectorIndexConfig,
+                VectorIndexSpec,
                 pb::searchlight::VectorIndexConfig
             >(v);
         }
@@ -114,7 +114,7 @@ mod tests {
         state: VectorIndexState,
     ) -> VectorIndexSnapshot {
         if expected_index_state == "backfilled" {
-            must_let!(let VectorIndexState::Backfilled(snapshot) = state);
+            must_let!(let VectorIndexState::Backfilled { snapshot, .. } = state);
             snapshot
         } else {
             must_let!(let VectorIndexState::SnapshottedAt(snapshot) = state);

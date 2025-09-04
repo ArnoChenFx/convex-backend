@@ -1,11 +1,12 @@
 import { cn } from "@ui/cn";
 
-type CalloutVariant = "instructions" | "error" | "localDev" | "upsell";
+type CalloutVariant = "instructions" | "error" | "hint" | "localDev" | "upsell";
 
-const classes = {
-  error: "bg-background-error border text-content-error",
-  instructions: "border bg-background-warning text-content-warning",
-  upsell: "border border-util-accent bg-util-accent/10",
+const classes: Record<CalloutVariant, string> = {
+  error: "bg-background-error text-content-error",
+  instructions: "bg-background-warning text-content-warning",
+  hint: "bg-util-accent/10",
+  upsell: "bg-util-accent/10",
   localDev:
     "bg-teal-100 border border-teal-500 dark:bg-teal-900 text-content-primary",
 };
@@ -22,7 +23,7 @@ export function Callout({
   return (
     <div
       className={cn(
-        `flex mt-2 px-3 py-2 rounded-sm text-sm ${classes[variant]}`,
+        `mt-2 flex rounded-lg p-3 text-sm ${classes[variant]}`,
         className,
       )}
       role="alert"

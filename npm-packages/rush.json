@@ -285,6 +285,10 @@
       "projectFolder": "@convex-dev/codemod/test/explicit-ids/sample-convex-project"
     },
     {
+      "packageName": "@convex-dev/workos",
+      "projectFolder": "@convex-dev/workos"
+    },
+    {
       "packageName": "publishing-tests",
       "projectFolder": "publishing-tests"
     },
@@ -295,6 +299,10 @@
     {
       "packageName": "@convex-dev/platform",
       "projectFolder": "@convex-dev/platform"
+    },
+    {
+      "packageName": "clerk-initial-auth",
+      "projectFolder": "private-demos/clerk-initial-auth"
     },
     {
       "packageName": "bundle-size",
@@ -315,6 +323,10 @@
     {
       "packageName": "typescript-demo",
       "projectFolder": "demos/typescript"
+    },
+    {
+      "packageName": "prewarming-demo",
+      "projectFolder": "demos/prewarming"
     },
     {
       "packageName": "typescript-demo-old",
@@ -551,6 +563,10 @@
     {
       "packageName": "@convex-dev/design-system",
       "projectFolder": "@convex-dev/design-system"
+    },
+    {
+      "packageName": "dashboard-storybook",
+      "projectFolder": "dashboard-storybook"
     },
     {
       "packageName": "udf-runtime",

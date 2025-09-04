@@ -95,15 +95,16 @@ use vector::{
 
 use crate::{
     committer::AFTER_PENDING_WRITE_SNAPSHOT,
-    index_workers::{
-        search_compactor::CompactionConfig,
-        writer::SearchIndexMetadataWriter,
-    },
     query::{
         PaginationOptions,
         TableFilter,
     },
     search_index_bootstrap::FINISHED_BOOTSTRAP_UPDATES,
+    search_index_workers::{
+        search_compactor::CompactionConfig,
+        writer::SearchIndexMetadataWriter,
+        FlusherType,
+    },
     test_helpers::{
         DbFixtures,
         DbFixturesArgs,
@@ -254,13 +255,14 @@ impl Scenario {
             self.search_storage.clone(),
             self.build_index_args.clone(),
         );
-        let mut flusher = new_text_flusher(
+        let flusher = new_text_flusher(
             self.rt.clone(),
             self.database.clone(),
             self.tp.reader(),
             self.search_storage.clone(),
             self.build_index_args.segment_term_metadata_fetcher.clone(),
             writer,
+            FlusherType::Backfill,
         );
         flusher.step().await?;
 
@@ -1447,7 +1449,7 @@ async fn test_flushing_does_not_invalidate_subscriptions(rt: TestRuntime) -> any
         .database
         .refresh_token(token.clone(), ts)
         .await?
-        .is_some());
+        .is_ok());
 
     // TODO(ENG-9324): deleting the index *should* invalidate the transaction, but
     // it currently does not.
@@ -1458,6 +1460,6 @@ async fn test_flushing_does_not_invalidate_subscriptions(rt: TestRuntime) -> any
     scenario.database.commit(tx).await?;
     let ts = *scenario.database.now_ts_for_reads();
     // this *should* return None, but for now it doesn't.
-    assert!(scenario.database.refresh_token(token, ts).await?.is_some());
+    assert!(scenario.database.refresh_token(token, ts).await?.is_ok());
     Ok(())
 }

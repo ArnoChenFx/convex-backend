@@ -14,6 +14,7 @@ module.exports = {
     "prettier",
     "plugin:better-tailwindcss/recommended-warn",
     "plugin:better-tailwindcss/recommended-error",
+    "plugin:storybook/recommended",
   ],
   plugins: ["prettier"],
   settings: {
@@ -183,8 +184,6 @@ module.exports = {
     "no-void": "off",
     // Disable enforce-consistent-line-wrapping temporarily (will enable later + blame-ignore diff)
     "better-tailwindcss/enforce-consistent-line-wrapping": "off",
-    // Disable enforce-consistent-class-order temporarily (will enable later + blame-ignore diff)
-    "better-tailwindcss/enforce-consistent-class-order": "off",
     "better-tailwindcss/no-unregistered-classes": [
       "error",
       {

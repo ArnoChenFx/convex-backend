@@ -1,12 +1,12 @@
 import chalk from "chalk";
+import { Context } from "../bundler/context.js";
 import {
-  Context,
   logFailure,
   logFinishedStep,
   logMessage,
   logWarning,
   showSpinner,
-} from "../bundler/context.js";
+} from "../bundler/log.js";
 import {
   DeploymentType,
   DeploymentName,
@@ -110,7 +110,6 @@ export async function deploymentCredentialsOrConfigure(
   deploymentSelection: DeploymentSelection,
   chosenConfiguration: ChosenConfiguration,
   cmdOptions: ConfigureCmdOptions,
-  partitionId?: number | undefined,
 ): Promise<
   DeploymentCredentials & {
     deploymentFields: {
@@ -126,7 +125,6 @@ export async function deploymentCredentialsOrConfigure(
     deploymentSelection,
     chosenConfiguration,
     cmdOptions,
-    partitionId,
   );
 
   if (selectedDeployment.deploymentFields !== null) {
@@ -161,7 +159,6 @@ export async function _deploymentCredentialsOrConfigure(
   deploymentSelection: DeploymentSelection,
   chosenConfiguration: ChosenConfiguration,
   cmdOptions: ConfigureCmdOptions,
-  partitionId?: number | undefined,
 ): Promise<
   DeploymentCredentials & {
     deploymentFields: {
@@ -215,7 +212,6 @@ export async function _deploymentCredentialsOrConfigure(
         chosenConfiguration,
         {
           globallyForceCloud,
-          partitionId,
         },
         cmdOptions,
       );
@@ -232,7 +228,6 @@ export async function _deploymentCredentialsOrConfigure(
         targetProject: deploymentSelection.targetProject,
         cmdOptions,
         globallyForceCloud,
-        partitionId,
       });
     }
     case "anonymous": {
@@ -255,7 +250,6 @@ export async function _deploymentCredentialsOrConfigure(
           chosenConfiguration,
           {
             globallyForceCloud,
-            partitionId,
           },
           cmdOptions,
         );
@@ -266,7 +260,6 @@ export async function _deploymentCredentialsOrConfigure(
       const forceAnonymous = process.env.CONVEX_AGENT_MODE === "anonymous";
       if (forceAnonymous) {
         logWarning(
-          ctx,
           chalk.yellow.bold(
             "CONVEX_AGENT_MODE=anonymous mode is in beta, functionality may change in the future.",
           ),
@@ -311,7 +304,6 @@ export async function _deploymentCredentialsOrConfigure(
         chosenConfiguration,
         {
           globallyForceCloud,
-          partitionId,
         },
         cmdOptions,
       );
@@ -326,13 +318,11 @@ async function handleDeploymentWithinProject(
     targetProject,
     cmdOptions,
     globallyForceCloud,
-    partitionId,
   }: {
     chosenConfiguration: ChosenConfiguration;
     targetProject: ProjectSelection;
     cmdOptions: ConfigureCmdOptions;
     globallyForceCloud: boolean;
-    partitionId?: number | undefined;
   },
 ) {
   const hasAuth = ctx.bigBrainAuth() !== null;
@@ -353,7 +343,6 @@ async function handleDeploymentWithinProject(
       chosenConfiguration,
       {
         globallyForceCloud,
-        partitionId,
       },
       cmdOptions,
     );
@@ -362,13 +351,12 @@ async function handleDeploymentWithinProject(
 
   const accessResult = await checkAccessToSelectedProject(ctx, targetProject);
   if (accessResult.kind === "noAccess") {
-    logMessage(ctx, "You don't have access to the selected project.");
+    logMessage("You don't have access to the selected project.");
     const result = await handleChooseProject(
       ctx,
       chosenConfiguration,
       {
         globallyForceCloud,
-        partitionId,
       },
       cmdOptions,
     );
@@ -410,7 +398,6 @@ async function handleChooseProject(
   chosenConfiguration: ChosenConfiguration,
   args: {
     globallyForceCloud: boolean;
-    partitionId?: number | undefined;
   },
   cmdOptions: ConfigureCmdOptions,
 ): Promise<
@@ -435,7 +422,6 @@ async function handleChooseProject(
     devDeployment: cmdOptions.devDeployment,
     local: args.globallyForceCloud ? false : cmdOptions.local,
     cloud: args.globallyForceCloud ? true : cmdOptions.cloud,
-    partitionId: args.partitionId,
   });
   // TODO complain about any non-default cmdOptions.localOptions here
   // because we're ignoring them if this isn't a local development.
@@ -454,7 +440,6 @@ async function handleChooseProject(
     teamSlug: project.teamSlug,
     projectSlug: project.projectSlug,
     deploymentOptions,
-    partitionId: args.partitionId,
   });
   return {
     url,
@@ -476,7 +461,6 @@ export async function handleManuallySetUrlAndAdminKey(
   const didErase = await eraseDeploymentEnvVar(ctx);
   if (didErase) {
     logMessage(
-      ctx,
       chalk.yellowBright(
         `Removed the CONVEX_DEPLOYMENT environment variable from .env.local`,
       ),
@@ -485,7 +469,6 @@ export async function handleManuallySetUrlAndAdminKey(
   const envVarWrite = await writeConvexUrlToEnvFile(ctx, url);
   if (envVarWrite !== null) {
     logMessage(
-      ctx,
       chalk.green(
         `Saved the given --url as ${envVarWrite.envVar} to ${envVarWrite.envFile}`,
       ),
@@ -503,7 +486,6 @@ export async function selectProject(
     devDeployment?: "cloud" | "local" | undefined;
     local?: boolean | undefined;
     cloud?: boolean | undefined;
-    partitionId?: number;
     defaultProjectName?: string | undefined;
   },
 ): Promise<{
@@ -540,7 +522,6 @@ async function selectNewProject(
     devDeployment?: "cloud" | "local" | undefined;
     cloud?: boolean | undefined;
     local?: boolean | undefined;
-    partitionId?: number | undefined;
     defaultProjectName?: string | undefined;
   },
 ) {
@@ -571,26 +552,24 @@ async function selectNewProject(
         : undefined,
   });
 
-  showSpinner(ctx, "Creating new Convex project...");
+  showSpinner("Creating new Convex project...");
 
   let projectSlug, teamSlug, projectsRemaining;
   try {
     ({ projectSlug, teamSlug, projectsRemaining } = await createProject(ctx, {
       teamSlug: selectedTeam,
       projectName,
-      partitionId: config.partitionId,
       // We have to create some deployment initially for a project.
       deploymentTypeToProvision: devDeployment === "local" ? "prod" : "dev",
     }));
   } catch (err) {
-    logFailure(ctx, "Unable to create project.");
+    logFailure("Unable to create project.");
     return await logAndHandleFetchError(ctx, err);
   }
   const teamMessage = didChooseBetweenTeams
     ? " in team " + chalk.bold(teamSlug)
     : "";
   logFinishedStep(
-    ctx,
     `Created project ${chalk.bold(
       projectSlug,
     )}${teamMessage}, manage it at ${chalk.bold(
@@ -600,7 +579,6 @@ async function selectNewProject(
 
   if (projectsRemaining <= 2) {
     logWarning(
-      ctx,
       chalk.yellow.bold(
         `Your account now has ${projectsRemaining} project${
           projectsRemaining === 1 ? "" : "s"
@@ -662,7 +640,7 @@ async function selectExistingProject(
         : undefined,
   });
 
-  showSpinner(ctx, `Reinitializing project ${projectSlug}...\n`);
+  showSpinner(`Reinitializing project ${projectSlug}...\n`);
 
   const { projectConfig: existingProjectConfig } = await readProjectConfig(ctx);
 
@@ -670,7 +648,7 @@ async function selectExistingProject(
 
   await doCodegen(ctx, functionsPath, "disable");
 
-  logFinishedStep(ctx, `Reinitialized project ${chalk.bold(projectSlug)}`);
+  logFinishedStep(`Reinitialized project ${chalk.bold(projectSlug)}`);
   return { teamSlug, projectSlug, devDeployment };
 }
 
@@ -712,7 +690,6 @@ async function ensureDeploymentProvisioned(
     teamSlug: string;
     projectSlug: string;
     deploymentOptions: DeploymentOptions;
-    partitionId: number | undefined;
   },
 ): Promise<DeploymentDetails> {
   switch (options.deploymentOptions.kind) {
@@ -727,7 +704,6 @@ async function ensureDeploymentProvisioned(
             projectSlug: options.projectSlug,
           },
           options.deploymentOptions.kind,
-          options.partitionId,
         );
       return {
         ...credentials,

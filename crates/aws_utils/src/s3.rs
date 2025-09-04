@@ -32,13 +32,14 @@ impl S3Client {
             false => RetryConfig::disabled(),
         };
         let config = must_s3_config_from_env()
-            .context("AWS env variables are required when using AWS Lambda")?
+            .await
+            .context(
+                "Failed to create S3 configuration. Check AWS env variables or IAM permissions.",
+            )?
             .retry_config(retry_config)
-            .load()
-            .await;
+            .build();
 
-        let s3_client = Client::new(&config);
-
+        let s3_client = Client::from_conf(config);
         Ok(Self(s3_client))
     }
 
@@ -132,7 +133,7 @@ impl S3Client {
         };
         let result = builder.send().await;
 
-        result.with_context(|| format!("Failed to delete S3 file with key {}", key))?;
+        result.with_context(|| format!("Failed to delete S3 file with key {key}"))?;
 
         tracing::info!("Delete of S3 file with key {} was successful", key);
 
@@ -201,10 +202,7 @@ impl S3Client {
                     .version_id
                     .as_deref()
                     .unwrap_or("[missing version_id]");
-                println!(
-                    "DRY RUN: Would delete marker for key {} version {}",
-                    key_str, version_str
-                );
+                println!("DRY RUN: Would delete marker for key {key_str} version {version_str}");
             }
             tracing::info!(
                 "DRY RUN: Would have recovered {num_markers_found} deleted files for instance \

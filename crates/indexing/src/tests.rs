@@ -1,5 +1,4 @@
 use std::{
-    collections::BTreeMap,
     str::FromStr,
     sync::Arc,
 };
@@ -7,8 +6,8 @@ use std::{
 use common::{
     bootstrap_model::index::{
         database_index::{
+            DatabaseIndexSpec,
             DatabaseIndexState,
-            DeveloperDatabaseIndexConfig,
             IndexedFields,
         },
         IndexConfig,
@@ -19,6 +18,7 @@ use common::{
     document::{
         CreationTime,
         PackedDocument,
+        ParseDocument as _,
         ResolvedDocument,
     },
     index::IndexKey,
@@ -27,6 +27,7 @@ use common::{
         DocumentLogEntry,
         NoopRetentionValidator,
         Persistence,
+        PersistenceIndexEntry,
         RepeatablePersistence,
     },
     testing::{
@@ -94,8 +95,8 @@ fn gen_index_document(
 fn index_documents(
     id_generator: &mut TestIdGenerator,
     mut indexes: Vec<TabletIndexMetadata>,
-) -> anyhow::Result<BTreeMap<ResolvedDocumentId, (Timestamp, PackedDocument)>> {
-    let mut index_documents = BTreeMap::new();
+) -> anyhow::Result<Vec<(Timestamp, PackedDocument)>> {
+    let mut index_documents = Vec::new();
 
     let index_table = id_generator.system_table_id(&INDEX_TABLE);
     // Add the _index.by_id index.
@@ -106,7 +107,7 @@ fn index_documents(
     let ts = Timestamp::must(0);
     for metadata in indexes {
         let doc = gen_index_document(id_generator, metadata.clone())?;
-        index_documents.insert(doc.id(), (ts, PackedDocument::pack(&doc)));
+        index_documents.push((ts, PackedDocument::pack(&doc)));
     }
     Ok(index_documents)
 }
@@ -117,7 +118,7 @@ fn test_metadata_add_and_drop_index() -> anyhow::Result<()> {
     let index_documents = index_documents(&mut id_generator, vec![])?;
     let mut index_registry = IndexRegistry::bootstrap(
         &id_generator,
-        index_documents.values().map(|(_, d)| d.clone()),
+        index_documents.iter().map(|(_, d)| d.clone()),
         PersistenceVersion::default(),
     )?;
 
@@ -159,7 +160,7 @@ fn test_metadata_rename_index() -> anyhow::Result<()> {
     let index_documents = index_documents(&mut id_generator, vec![])?;
     let mut index_registry = IndexRegistry::bootstrap(
         &id_generator,
-        index_documents.values().map(|(_, d)| d.clone()),
+        index_documents.iter().map(|(_, d)| d.clone()),
         PersistenceVersion::default(),
     )?;
     let table = id_generator.user_table_id(&"messages".parse()?);
@@ -190,7 +191,7 @@ fn test_metadata_rename_index() -> anyhow::Result<()> {
     let result = index_registry.update(Some(&original), Some(&rename));
     let err = result.unwrap_err();
     assert!(
-        format!("{:?}", err).contains(&format!(
+        format!("{err:?}").contains(&format!(
             "Can't rename system defined index {}.by_id",
             table.tablet_id
         )),
@@ -244,7 +245,7 @@ fn test_metadata_change_index() -> anyhow::Result<()> {
     let index_documents = index_documents(&mut id_generator, indexes)?;
     let mut index_registry = IndexRegistry::bootstrap(
         &id_generator,
-        index_documents.values().map(|(_, d)| d.clone()),
+        index_documents.iter().map(|(_, d)| d.clone()),
         PersistenceVersion::default(),
     )?;
 
@@ -266,10 +267,10 @@ fn test_metadata_change_index() -> anyhow::Result<()> {
     let result = index_registry.update(Some(&original), Some(&changed_fields));
     assert!(result.is_err());
     assert!(format!("{:?}", result.unwrap_err())
-        .contains("Can't modify developer index config for existing indexes"));
+        .contains("Can't modify index spec for existing indexes"));
     let current_metadata = index_registry.enabled_index_metadata(&by_name).unwrap();
-    must_let!(let IndexConfig::Database { developer_config, .. } = &current_metadata.config);
-    must_let!(let DeveloperDatabaseIndexConfig { fields } = developer_config);
+    must_let!(let IndexConfig::Database { spec, .. } = &current_metadata.config);
+    must_let!(let DatabaseIndexSpec { fields } = spec);
     assert_eq!(*fields, vec!["name".parse()?].try_into()?,);
 
     // Changing which table the index is indexing is not allowed.
@@ -307,7 +308,7 @@ fn test_metadata_change_index() -> anyhow::Result<()> {
     let current_metadata = index_registry.enabled_index_metadata(&by_name).unwrap();
     must_let!(
         let IndexConfig::Database {
-            developer_config: DeveloperDatabaseIndexConfig { fields },
+            spec: DatabaseIndexSpec { fields },
             ..
         } = &current_metadata.config
     );
@@ -323,7 +324,7 @@ fn test_second_pending_index_for_name_fails() -> anyhow::Result<()> {
     let index_documents = index_documents(&mut id_generator, indexes)?;
     let mut index_registry = IndexRegistry::bootstrap(
         &id_generator,
-        index_documents.values().map(|(_, d)| d.clone()),
+        index_documents.iter().map(|(_, d)| d.clone()),
         PersistenceVersion::default(),
     )?;
     let table = id_generator.user_table_id(&"messages".parse()?);
@@ -359,8 +360,8 @@ fn test_second_pending_index_for_name_fails() -> anyhow::Result<()> {
         ))
     );
     let current_index = index_registry.get_pending(&by_name).unwrap();
-    must_let!(let IndexConfig::Database { developer_config, .. } = &current_index.metadata.config);
-    must_let!(let DeveloperDatabaseIndexConfig { fields } = developer_config);
+    must_let!(let IndexConfig::Database { spec, .. } = &current_index.metadata.config);
+    must_let!(let DatabaseIndexSpec { fields } = spec);
     assert_eq!(*fields, vec!["name".parse()?].try_into()?,);
 
     Ok(())
@@ -381,7 +382,7 @@ fn test_metadata_index_updates() -> anyhow::Result<()> {
     let index_documents = index_documents(&mut id_generator, indexes)?;
     let mut index_registry = IndexRegistry::bootstrap(
         &id_generator,
-        index_documents.values().map(|(_, d)| d.clone()),
+        index_documents.iter().map(|(_, d)| d.clone()),
         PersistenceVersion::default(),
     )?;
     let mut in_memory_indexes =
@@ -558,7 +559,7 @@ async fn test_load_into_memory(_rt: TestRuntime) -> anyhow::Result<()> {
     let index_documents = index_documents(&mut id_generator, indexes)?;
     let mut index_registry = IndexRegistry::bootstrap(
         &id_generator,
-        index_documents.values().map(|(_, d)| d.clone()),
+        index_documents.iter().map(|(_, d)| d.clone()),
         PersistenceVersion::default(),
     )?;
     let mut in_memory_indexes =
@@ -603,7 +604,7 @@ async fn test_load_into_memory(_rt: TestRuntime) -> anyhow::Result<()> {
         ],
         index_updates
             .into_iter()
-            .map(|u| (Timestamp::must(2), u))
+            .map(|u| PersistenceIndexEntry::from_index_update(Timestamp::must(2), u))
             .collect(),
         ConflictStrategy::Error,
     )
@@ -614,8 +615,8 @@ async fn test_load_into_memory(_rt: TestRuntime) -> anyhow::Result<()> {
     // Load the index.
     in_memory_indexes
         .load_enabled(
-            &index_registry,
-            &by_author,
+            table.tablet_id,
+            vec![(&index_doc).parse()?],
             &RepeatablePersistence::new(
                 ps.clone(),
                 unchecked_repeatable_ts(Timestamp::must(2)),
@@ -701,7 +702,7 @@ fn default_registry(id_generator: &mut TestIdGenerator) -> anyhow::Result<IndexR
     let index_documents = index_documents(id_generator, vec![])?;
     IndexRegistry::bootstrap(
         id_generator,
-        index_documents.values().map(|(_, d)| d.clone()),
+        index_documents.iter().map(|(_, d)| d.clone()),
         PersistenceVersion::default(),
     )
 }

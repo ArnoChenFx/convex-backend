@@ -92,10 +92,7 @@ use shape_inference::{
     export_context::GeneratedSchema,
     ProdConfigWithOptionalFields,
 };
-use storage::{
-    Storage,
-    StorageExt,
-};
+use storage::Storage;
 use sync_types::{
     backoff::Backoff,
     Timestamp,
@@ -165,6 +162,13 @@ mod worker;
 
 pub use worker::SnapshotImportWorker;
 
+// NB: This is a bandaid. In general, we want to retry forever on system
+// failures, because all system failures should be transient. If we have
+// nontransient system errors, those are bugs and we should fix them. However,
+// while we are in the process, use this as a bandaid to limit the damage. Once
+// nontransient system errors are fixed, we can remove this.
+const SNAPSHOT_IMPORT_MAX_SYSTEM_FAILURES: u32 = 5;
+
 struct SnapshotImportExecutor<RT: Runtime> {
     runtime: RT,
     database: Database<RT>,
@@ -210,7 +214,9 @@ impl<RT: Runtime> SnapshotImportExecutor<RT> {
             },
             Err(e) => {
                 let mut e = wrap_import_err(e);
-                if e.is_bad_request() {
+                if e.is_bad_request()
+                    || self.backoff.failures() >= SNAPSHOT_IMPORT_MAX_SYSTEM_FAILURES
+                {
                     report_error(&mut e).await;
                     self.database
                         .execute_with_overloaded_retries(
@@ -268,7 +274,9 @@ impl<RT: Runtime> SnapshotImportExecutor<RT> {
             },
             Err(e) => {
                 let mut e = wrap_import_err(e);
-                if e.is_bad_request() {
+                if e.is_bad_request()
+                    || self.backoff.failures() >= SNAPSHOT_IMPORT_MAX_SYSTEM_FAILURES
+                {
                     report_error(&mut e).await;
                     self.database
                         .execute_with_overloaded_retries(
@@ -303,13 +311,11 @@ impl<RT: Runtime> SnapshotImportExecutor<RT> {
         let now = CreationTime::try_from(*self.database.now_ts_for_reads())?;
         let age = Duration::from_millis((f64::from(now) - f64::from(creation_time)) as u64);
         log_snapshot_import_age(age);
-        if age > *MAX_IMPORT_AGE / 2 {
-            tracing::warn!(
-                "SnapshotImport {} running too long ({:?})",
-                snapshot_import.id(),
-                age
-            );
-        }
+        tracing::info!(
+            "SnapshotImport attempt of {} starting ({:?}) after its creation.",
+            snapshot_import.id(),
+            age
+        );
         if age > *MAX_IMPORT_AGE {
             anyhow::bail!(ErrorMetadata::bad_request(
                 "ImportFailed",
@@ -403,17 +409,17 @@ impl<RT: Runtime> SnapshotImportExecutor<RT> {
                 snapshot_import.component_path.clone(),
             )
         };
-        let body_stream = move || {
-            let object_key = object_key.clone();
-            async move {
-                let reader = match object_key.clone() {
-                    Ok(key) => self.snapshot_imports_storage.get_fq_object(&key).await?,
-                    Err(key) => self.snapshot_imports_storage.get(&key).await?,
-                };
-                reader.with_context(|| format!("Missing import object {:?}", object_key))
-            }
+        let fq_key = match &object_key {
+            Ok(key) => key.clone(),
+            Err(key) => self.snapshot_imports_storage.fully_qualified_key(key),
         };
-        let objects = parse_objects(format.clone(), component_path.clone(), body_stream).boxed();
+        let objects = parse_objects(
+            format.clone(),
+            component_path.clone(),
+            self.snapshot_imports_storage.clone(),
+            fq_key,
+        )
+        .boxed();
 
         let component_id = prepare_component_for_import(&self.database, &component_path).await?;
         // Remapping could be more extensive here, it's just relatively simple to handle
@@ -743,6 +749,11 @@ async fn import_objects<RT: Runtime>(
     for (tablet_id, (namespace, _table_number, table_name)) in
         table_mapping_for_import.to_delete.clone().into_iter()
     {
+        // Avoid deleting componentless namespaces (created during start_push).
+        if tx.get_component_path(namespace.into()).is_none() {
+            table_mapping_for_import.to_delete.remove(&tablet_id);
+        }
+
         let schema = SchemaModel::new(&mut tx, namespace)
             .get_by_state(SchemaState::Active)
             .await?;
@@ -890,15 +901,23 @@ async fn finalize_import<RT: Runtime>(
                             .count(namespace, &table_name)
                             .await?
                             .unwrap_or(0);
+                        tracing::info!(
+                            "finalize_import({import_id:?}) Deleting table {table_name} in \
+                             namespace {namespace:?}"
+                        );
                         table_model
                             .delete_active_table(namespace, table_name)
                             .await?;
                     }
                     schema_constraints.validate(tx).await?;
                     let mut table_model = TableModel::new(tx);
-                    for (table_id, _, table_number, table_name) in
+                    for (table_id, namespace, table_number, table_name) in
                         table_mapping_for_import.table_mapping_in_import.iter()
                     {
+                        tracing::info!(
+                            "finalize_import({import_id:?}) Activating table {table_name} in \
+                             namespace {namespace:?}"
+                        );
                         documents_deleted += table_model
                             .activate_table(table_id, table_name, table_number, &tables_affected)
                             .await?;
@@ -1449,7 +1468,7 @@ async fn backfill_and_enable_indexes_on_table<RT: Runtime>(
                     let mut backfilled_indexes = vec![];
                     for index in index_model.all_indexes_on_table(tablet_id).await? {
                         if !index.config.is_enabled() {
-                            backfilled_indexes.push(index.into_value());
+                            backfilled_indexes.push(index);
                         }
                     }
                     index_model

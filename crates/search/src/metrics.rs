@@ -543,7 +543,7 @@ pub fn log_text_document_indexed(schema: &TantivySearchIndexSchema, document: &T
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, strum::AsRefStr)]
 pub enum SearchType {
     Vector,
     Text,
@@ -659,7 +659,7 @@ register_convex_counter!(
     "Number of times an index was not found in DocumentIndexKeys"
 );
 pub fn log_missing_index_key() {
-    // See the comment in the homologous function in database::metrics
+    // See the comment in log_missing_index_key_staleness (database::metrics)
     log_counter(&SEARCH_MISSING_INDEX_KEY_TOTAL, 1);
 }
 

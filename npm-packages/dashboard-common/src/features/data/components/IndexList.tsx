@@ -1,76 +1,337 @@
-import React from "react";
-import { Index, useTableIndexes } from "@common/features/data/lib/api";
-import { Callout } from "@ui/Callout";
+import groupBy from "lodash/groupBy";
+import {
+  MagnifyingGlassIcon,
+  QuestionMarkCircledIcon,
+  ArrowTopRightIcon,
+} from "@radix-ui/react-icons";
+import { FingerPrintIcon } from "@heroicons/react/24/outline";
+import { Index } from "@common/features/data/lib/api";
+import { useNents } from "@common/lib/useNents";
+import { Loading } from "@ui/Loading";
 import { Spinner } from "@ui/Spinner";
+import { useQuery } from "convex/react";
+import { api } from "system-udfs/convex/_generated/api";
+import { Fragment } from "react";
+import { ProgressBar } from "@ui/ProgressBar";
 import { Tooltip } from "@ui/Tooltip";
-
-function IndexRow({ index }: { index: Index }) {
-  const { type, fields } = getIndexDescription(index);
-  return (
-    <tr className="border-b">
-      <td className="max-w-[6rem] divide-y divide-border-transparent truncate py-2 pr-8 font-mono text-sm text-content-secondary sm:max-w-[16rem]">
-        {index.name}
-      </td>
-      <td className="max-w-[9rem] truncate py-2 pr-8 font-mono text-sm text-content-secondary sm:max-w-[24rem]">
-        {fields}
-      </td>
-      <td className="ml-auto w-full py-2 text-sm text-content-secondary">
-        {index.backfill.state !== "done" ? (
-          <Tooltip tip="This index is currently backfilling, and is not yet ready to use.">
-            <span className="h-5 w-5">
-              <Spinner />
-            </span>
-          </Tooltip>
-        ) : (
-          type
-        )}
-      </td>
-    </tr>
-  );
-}
-
-function getIndexDescription(index: Index) {
-  if (index.fields instanceof Array) {
-    return { type: "", fields: index.fields.join(", ") };
-  }
-  if ("searchField" in index.fields) {
-    return { type: "text search index", fields: index.fields.searchField };
-  }
-  return { type: "vector search index", fields: index.fields.vectorField };
-}
-
-export function IndexesList({ indexes }: { indexes?: Index[] }) {
-  return !indexes || indexes.length === 0 ? (
-    <>This table has no indexes</>
-  ) : (
-    <table className="table-auto">
-      <thead>
-        <tr className="border-b">
-          <th className="max-w-[6rem] divide-y py-2 pr-8 text-left text-sm font-semibold text-content-secondary sm:max-w-[16rem]">
-            Name
-          </th>
-          <th className="max-w-[9rem] py-2 pr-8 text-left text-sm font-semibold text-content-secondary sm:max-w-[24rem]">
-            Fields
-          </th>
-          <th aria-label="type and details" />
-        </tr>
-      </thead>
-
-      <tbody>
-        {indexes.map((index) => (
-          <IndexRow key={index.name} index={index} />
-        ))}
-      </tbody>
-    </table>
-  );
-}
+import { cn } from "@ui/cn";
+import { Callout } from "@ui/Callout";
 
 export function IndexList({ tableName }: { tableName: string }) {
-  const { indexes, hadError } = useTableIndexes(tableName);
+  const { selectedNent } = useNents();
+  const indexes =
+    useQuery(api._system.frontend.indexes.default, {
+      tableName,
+      tableNamespace: selectedNent?.id ?? null,
+    }) ?? undefined;
 
-  return hadError ? (
-    <Callout variant="error">Encountered an error loading indexes.</Callout>
-  ) : (
-    <IndexesList indexes={indexes} />
+  return <IndexesList tableName={tableName} indexes={indexes} />;
+}
+
+export function IndexesList({
+  tableName,
+  indexes,
+}: {
+  tableName: string;
+  indexes: Index[] | undefined;
+}) {
+  if (indexes === undefined) {
+    return <Loading />;
+  }
+
+  const recommendStagedIndexes = (indexes ?? []).some(
+    (index) =>
+      index.backfill.state === "backfilling" &&
+      !index.staged &&
+      index.backfill.stats?.totalDocs &&
+      index.backfill.stats.totalDocs > 10_000,
   );
+
+  const groupedIndexes = groupBy(indexes, getIndexType);
+
+  return (
+    <div className="flex flex-col gap-6">
+      {recommendStagedIndexes && (
+        <Callout variant="hint">
+          <p>
+            <strong className="font-semibold">Hint</strong>: When adding an
+            index to a large table, consider using a{" "}
+            <a
+              href="https://docs.convex.dev/database/reading-data/indexes/#staged-indexes"
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              staged index
+            </a>{" "}
+            to avoid blocking deploy.
+          </p>
+        </Callout>
+      )}
+      <div className="flex flex-col gap-10">
+        <IndexListSection
+          title="Indexes"
+          description="Indexes allow you to speed up your document queries by telling Convex how to organize your documents."
+          learnMoreUrl="https://docs.convex.dev/database/reading-data/indexes/"
+          indexes={groupedIndexes.database ?? []}
+          icon={FingerPrintIcon}
+          tableName={tableName}
+        />
+        <IndexListSection
+          title="Search indexes"
+          description="Search indexes allows you to find Convex documents that approximately match a textual search query."
+          learnMoreUrl="https://docs.convex.dev/search/text-search"
+          indexes={groupedIndexes.search ?? []}
+          icon={MagnifyingGlassIcon}
+          tableName={tableName}
+        />
+        <IndexListSection
+          title="Vector indexes"
+          description="Vector search allows you to find Convex documents similar to a provided vector."
+          learnMoreUrl="https://docs.convex.dev/search/vector-search"
+          indexes={groupedIndexes.vector ?? []}
+          icon={ArrowTopRightIcon}
+          tableName={tableName}
+        />
+      </div>
+    </div>
+  );
+}
+
+function IndexListSection({
+  title,
+  description,
+  learnMoreUrl,
+  indexes,
+  icon: Icon,
+  tableName,
+}: {
+  title: string;
+  description: string;
+  learnMoreUrl: string;
+  indexes: Index[];
+  icon: React.FC<{ className?: string }>;
+  tableName: string;
+}) {
+  const indexesByName = groupBy(indexes, "name");
+
+  return (
+    <div className="flex flex-col gap-3">
+      <header className="flex items-center gap-1.5 text-content-primary">
+        <Icon className="size-5 text-content-secondary" />
+        <h5 className="text-base font-medium">{title}</h5>
+        <Tooltip
+          tip={
+            <p>
+              {description}{" "}
+              <a
+                href={learnMoreUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-content-link hover:underline"
+              >
+                Learn more
+              </a>
+            </p>
+          }
+        >
+          <QuestionMarkCircledIcon className="text-content-tertiary" />
+        </Tooltip>
+      </header>
+      {indexes.length === 0 ? (
+        <div className="text-sm text-content-tertiary">
+          <code>{tableName}</code> has no {title.toLowerCase()}.
+        </div>
+      ) : (
+        <div className="flex flex-col gap-5">
+          {indexes.map((index) => (
+            <IndexListRow
+              key={`${index.name} ${indexesByName[index.name].indexOf(index)}`}
+              index={index}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function IndexListRow({ index }: { index: Index }) {
+  const { fields } = index;
+  const isStaged = index.staged === true;
+
+  return (
+    <article className="flex flex-col gap-2 text-sm text-content-secondary">
+      <header className="flex items-center gap-1">
+        <div className="flex items-baseline gap-1">
+          <h6 className="truncate font-mono text-sm font-medium text-content-primary">
+            {index.name}
+          </h6>
+
+          {isStaged && (
+            <Tooltip
+              className="ml-1 flex gap-1"
+              tip={
+                <div className="text-sm">
+                  <p className="mb-2">
+                    Staged indexes are not queryable. To enable this index,
+                    remove{" "}
+                    <code className="whitespace-nowrap">
+                      {"{ staged: true }"}
+                    </code>{" "}
+                    in your <code>schema.ts</code> file.
+                  </p>
+                </div>
+              }
+            >
+              <span className="text-xs text-content-tertiary underline decoration-dotted">
+                Staged
+              </span>
+              <QuestionMarkCircledIcon className="text-content-tertiary" />
+            </Tooltip>
+          )}
+        </div>
+        <div
+          className={cn("ml-1 grow border-b", isStaged && "border-dashed")}
+        />
+      </header>
+
+      <div className="flex flex-col gap-1 pl-2">
+        {Array.isArray(fields) && (
+          <IndexAttribute title="Fields">
+            <FieldList fields={fields} />
+          </IndexAttribute>
+        )}
+
+        {"searchField" in fields && (
+          <IndexAttribute title="Search field">
+            <code>{fields.searchField}</code>
+          </IndexAttribute>
+        )}
+
+        {"vectorField" in fields && (
+          <IndexAttribute title="Vector field">
+            <code>{fields.vectorField}</code>
+          </IndexAttribute>
+        )}
+
+        {"filterFields" in fields && fields.filterFields.length > 0 && (
+          <IndexAttribute title="Filter fields">
+            <FieldList fields={fields.filterFields} />
+          </IndexAttribute>
+        )}
+
+        {"dimensions" in fields && (
+          <IndexAttribute title="Dimensions">
+            {fields.dimensions}
+          </IndexAttribute>
+        )}
+      </div>
+
+      {index.backfill.state === "backfilling" && (
+        <div className="flex flex-col gap-1 pl-2">
+          <div className="flex items-center gap-2">
+            {!(
+              index.backfill.stats && index.backfill.stats.totalDocs !== null
+            ) && (
+              <div>
+                <Spinner />
+              </div>
+            )}
+            Backfill in progress
+          </div>
+          {index.backfill.stats && index.backfill.stats.totalDocs !== null && (
+            <IndexBackfillProgress
+              fraction={Math.min(
+                // numDocsIndexed is an estimate and can grow larger than totalDocs
+                // (in particular because if new documents are added during the backfill,
+                // totalDocs is not updated), so we cap at 99% to not confuse the user
+                0.99,
+                index.backfill.stats.numDocsIndexed /
+                  index.backfill.stats.totalDocs,
+              )}
+              variant="stripes"
+            />
+          )}
+        </div>
+      )}
+      {index.backfill.state === "backfilled" && (
+        <div className="flex flex-col gap-1 pl-2">
+          Backfill completed
+          <IndexBackfillProgress fraction={1} variant="solid" />
+        </div>
+      )}
+    </article>
+  );
+}
+
+function IndexAttribute({
+  title,
+  children,
+}: React.PropsWithChildren<{ title: string }>) {
+  return (
+    <div className="flex gap-1">
+      <span>
+        <strong className="font-medium text-content-primary">{title}</strong>:
+      </span>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+function FieldList({ fields }: { fields: string[] }) {
+  return (
+    <>
+      {fields.map((field) => (
+        <Fragment key={field}>
+          <code>{field}</code>
+          {fields.length > 1 && fields.indexOf(field) < fields.length - 1 && (
+            <span>, </span>
+          )}
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
+function IndexBackfillProgress({
+  fraction,
+  variant,
+}: {
+  fraction: number;
+  variant: "stripes" | "solid";
+}) {
+  const percent = Math.round(fraction * 100);
+  return (
+    <div className="flex items-center gap-3">
+      <ProgressBar
+        fraction={fraction}
+        ariaLabel="Index backfill progress"
+        variant={variant}
+        className="grow"
+      />
+      <span className="min-w-[4ch] text-right text-xs text-content-tertiary tabular-nums">
+        {percent}%
+      </span>
+    </div>
+  );
+}
+
+function getIndexType(
+  index: Index,
+): "database" | "search" | "vector" | "unknown" {
+  if (Array.isArray(index.fields)) {
+    return "database";
+  }
+
+  if ("searchField" in index.fields) {
+    return "search";
+  }
+
+  if ("vectorField" in index.fields) {
+    return "vector";
+  }
+
+  index.fields satisfies never;
+  return "unknown";
 }

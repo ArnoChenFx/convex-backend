@@ -2,28 +2,11 @@ import { useFlags } from "launchdarkly-react-client-sdk";
 import kebabCase from "lodash/kebabCase";
 
 const flagDefaults: {
-  oauthProviderConfiguration: Record<
-    string,
-    {
-      allowedRedirects: string[];
-      name: string;
-      allowImplicitFlow?: boolean;
-    }
-  >;
-  enableIndexFilters: boolean;
-  referralsPage: boolean;
   commandPalette: boolean;
   commandPaletteDeleteProjects: boolean;
-  multipleUserIdentities: boolean;
-  changePrimaryIdentity: boolean;
 } = {
-  oauthProviderConfiguration: {},
-  enableIndexFilters: false,
-  referralsPage: false,
   commandPalette: false,
   commandPaletteDeleteProjects: false,
-  multipleUserIdentities: false,
-  changePrimaryIdentity: false,
 };
 
 function kebabCaseKeys(object: typeof flagDefaults) {

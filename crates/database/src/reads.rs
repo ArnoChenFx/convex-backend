@@ -222,7 +222,7 @@ impl ReadSet {
         ) in iter_indexes_for_table(&self.indexed, id.tablet_id)
         {
             let Some(DocumentIndexKeyValue::Standard(index_key)) = index_keys.get(index) else {
-                metrics::log_missing_index_key();
+                metrics::log_missing_index_key_staleness();
                 continue;
             };
 
@@ -249,7 +249,7 @@ impl ReadSet {
         // Search indexes
         for (index, search_reads) in iter_indexes_for_table(&self.search, id.tablet_id) {
             let Some(DocumentIndexKeyValue::Search(value)) = index_keys.get(index) else {
-                metrics::log_missing_index_key();
+                metrics::log_missing_search_index_key_staleness();
                 continue;
             };
 
@@ -283,7 +283,7 @@ impl ReadSet {
         persistence_version: PersistenceVersion,
     ) -> Option<ConflictingReadWithWriteSource> {
         let mut buffer = IndexKeyBuffer::new();
-        for (_ts, updates, write_source) in updates {
+        for (update_ts, updates, write_source) in updates {
             for (_, update) in updates {
                 if let Some(ref document) = update.new_document {
                     if let Some(conflicting_read) =
@@ -292,6 +292,7 @@ impl ReadSet {
                         return Some(ConflictingReadWithWriteSource {
                             read: conflicting_read,
                             write_source: write_source.clone(),
+                            write_ts: *update_ts,
                         });
                     }
                 }
@@ -302,6 +303,7 @@ impl ReadSet {
                         return Some(ConflictingReadWithWriteSource {
                             read: conflicting_read,
                             write_source: write_source.clone(),
+                            write_ts: *update_ts,
                         });
                     }
                 }
@@ -323,13 +325,14 @@ impl ReadSet {
             ),
         >,
     ) -> Option<ConflictingReadWithWriteSource> {
-        for (_ts, updates, write_source) in updates {
+        for (update_ts, updates, write_source) in updates {
             for (id, update) in updates {
                 if let Some(ref document) = update.new_document_keys {
                     if let Some(conflicting_read) = self.overlaps_index_keys(*id, document) {
                         return Some(ConflictingReadWithWriteSource {
                             read: conflicting_read,
                             write_source: write_source.clone(),
+                            write_ts: *update_ts,
                         });
                     }
                 }
@@ -338,6 +341,7 @@ impl ReadSet {
                         return Some(ConflictingReadWithWriteSource {
                             read: conflicting_read,
                             write_source: write_source.clone(),
+                            write_ts: *update_ts,
                         });
                     }
                 }
@@ -436,8 +440,7 @@ impl TransactionReadSet {
 
                 assert_eq!(
                     *existing_fields, fields,
-                    "trying to change index fields for index {:?}!",
-                    index_name
+                    "trying to change index fields for index {index_name:?}!"
                 );
 
                 let range_num_intervals_before = range_set.len();

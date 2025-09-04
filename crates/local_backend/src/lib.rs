@@ -29,10 +29,14 @@ use common::{
     },
     knobs::{
         ACTION_USER_TIMEOUT,
+        DOCUMENT_RETENTION_RATE_LIMIT,
         UDF_CACHE_MAX_SIZE,
     },
     persistence::Persistence,
-    runtime::Runtime,
+    runtime::{
+        new_rate_limiter,
+        Runtime,
+    },
     shutdown::ShutdownSignal,
     types::{
         ConvexOrigin,
@@ -42,6 +46,7 @@ use common::{
 use config::LocalConfig;
 use database::Database;
 use events::usage::NoOpUsageEventLogger;
+use exports::interface::InProcessExportProvider;
 use file_storage::{
     FileStorage,
     TransactionalFileStorage,
@@ -51,6 +56,7 @@ use function_runner::{
     server::InstanceStorage,
     FunctionRunner,
 };
+use governor::Quota;
 use model::{
     initialize_application_system_tables,
     virtual_system_mapping,
@@ -152,6 +158,10 @@ pub async fn make_app(
         preempt_tx.clone(),
         virtual_system_mapping().clone(),
         Arc::new(NoOpUsageEventLogger),
+        Arc::new(new_rate_limiter(
+            runtime.clone(),
+            Quota::per_second(*DOCUMENT_RETENTION_RATE_LIMIT),
+        )),
     )
     .await?;
     initialize_application_system_tables(&database).await?;
@@ -232,6 +242,7 @@ pub async fn make_app(
         fetch_client,
         config.local_log_sink.clone(),
         preempt_tx.clone(),
+        Arc::new(InProcessExportProvider),
     )
     .await?;
 

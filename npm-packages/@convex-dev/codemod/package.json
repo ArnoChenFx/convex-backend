@@ -1,7 +1,8 @@
 {
   "name": "@convex-dev/codemod",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Automatic codemods to help you migrate your codebase to newer versions of Convex",
+  "type": "module",
   "main": "dist/index.js",
   "bin": {
     "@convex-dev/codemod": "dist/index.js"
@@ -10,8 +11,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
+    "build": "tsdown",
+    "dev": "tsdown --watch",
     "test": "vitest",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build"
@@ -19,9 +20,9 @@
   "devDependencies": {
     "@types/node": "^18.17.0",
     "@types/progress": "~2.0.7",
-    "tsup": "^8.0.0",
+    "tsdown": "^0.14.2",
     "typescript": "~5.0.3",
-    "vitest": "^3.1.4"
+    "vitest": "^3.2.4"
   },
   "dependencies": {
     "@babel/code-frame": "^7.27.1",
@@ -37,6 +38,6 @@
     "ts-morph": "^26.0.0"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   }
 }

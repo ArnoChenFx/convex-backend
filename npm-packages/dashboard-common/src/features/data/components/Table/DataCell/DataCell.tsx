@@ -270,7 +270,7 @@ function DataCellImpl({
           {!column.disableResizing && (
             <div
               {...column.getResizerProps()}
-              className="absolute right-0 top-0 inline-block h-full"
+              className="absolute top-0 right-0 inline-block h-full"
               style={{
                 // @ts-expect-error bad typing in react-table
                 ...column.getResizerProps().style,
@@ -293,7 +293,7 @@ function DataCellImpl({
             }
             className={cn(
               buttonClasses({ size: "xs", variant: "neutral" }),
-              "absolute z-20 shadow-xs",
+              "absolute z-20 shadow-xs hover:bg-background-tertiary",
               isFocused && "focused",
               "animate-none",
             )}

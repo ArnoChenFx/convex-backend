@@ -19,7 +19,7 @@ use crate::{
         IndexWorkerMetadataModel,
         IndexWorkerMetadataRecord,
     },
-    index_workers::fast_forward::IndexFastForward,
+    search_index_workers::fast_forward::IndexFastForward,
     Snapshot,
     Transaction,
 };
@@ -40,9 +40,8 @@ impl<RT: Runtime> IndexFastForward<RT, TextSnapshotVersion> for TextFastForward 
             return None;
         };
         let TextIndexSnapshot { ts, version, .. } = match on_disk_state {
-            TextIndexState::SnapshottedAt(snapshot) | TextIndexState::Backfilled(snapshot) => {
-                snapshot
-            },
+            TextIndexState::SnapshottedAt(snapshot)
+            | TextIndexState::Backfilled { snapshot, .. } => snapshot,
             TextIndexState::Backfilling(_) => return None,
         };
         Some((*ts, *version))
@@ -88,7 +87,7 @@ pub mod tests {
 
     use crate::{
         bootstrap_model::index_workers::IndexWorkerMetadataModel,
-        index_workers::fast_forward::{
+        search_index_workers::fast_forward::{
             FastForwardIndexWorker,
             LastFastForwardInfo,
         },
@@ -131,7 +130,8 @@ pub mod tests {
         } = fixtures
             .insert_backfilling_text_index_with_document()
             .await?;
-        let mut worker = fixtures.new_search_flusher();
+        let index_id = index_id.internal_id();
+        let worker = fixtures.new_backfill_text_flusher();
 
         // Backfill the index
         let (metrics, _) = worker.step().await?;

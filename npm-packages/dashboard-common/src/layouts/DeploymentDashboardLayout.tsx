@@ -16,7 +16,11 @@ import { DeploymentInfoContext } from "@common/lib/deploymentContext";
 import { useGlobalLocalStorage } from "@common/lib/useGlobalLocalStorage";
 import { useCollapseSidebarState } from "@common/lib/useCollapseSidebarState";
 import { PulseIcon } from "@common/elements/icons";
-import { Sidebar, useCurrentPage } from "@common/elements/Sidebar";
+import {
+  Sidebar,
+  SidebarGroup,
+  useCurrentPage,
+} from "@common/elements/Sidebar";
 import { FunctionRunnerWrapper } from "@common/features/functionRunner/components/FunctionRunnerWrapper";
 import { FunctionsProvider } from "@common/lib/functions/FunctionsProvider";
 import { useIsGlobalRunnerShown } from "@common/features/functionRunner/lib/functionRunner";
@@ -86,7 +90,7 @@ export function DeploymentDashboardLayout({
     },
   ];
 
-  const sidebarItems = [
+  const sidebarItems: SidebarGroup[] = [
     {
       key: "explore",
       items: exploreDeploymentPages,
@@ -102,7 +106,7 @@ export function DeploymentDashboardLayout({
             ? `https://dashboard.convex.dev/d/${deploymentName}/history`
             : `${uriPrefix}/history`,
           target: isCloudDeploymentInSelfHostedDashboard ? "_blank" : undefined,
-          disabled: !auditLogsEnabled,
+          muted: !auditLogsEnabled,
           tooltip: auditLogsEnabled
             ? undefined
             : "Deployment history is only available on the Pro plan.",
@@ -121,6 +125,7 @@ export function DeploymentDashboardLayout({
     <FunctionsProvider>
       <div className="flex h-full grow flex-col overflow-y-hidden">
         <PauseBanner />
+        <NodeVersionBanner />
         <div className="flex h-full flex-col sm:flex-row">
           <Sidebar
             collapsed={!!collapsed}
@@ -143,7 +148,7 @@ export function DeploymentDashboardLayout({
               className={
                 isRunnerExpanded && isGlobalRunnerShown
                   ? "h-0 w-0"
-                  : "h-full w-full overflow-x-auto scrollbar"
+                  : "scrollbar h-full w-full overflow-x-auto"
               }
             >
               {children}
@@ -190,6 +195,30 @@ function PauseBanner() {
       page.
     </div>
   );
+}
+
+function NodeVersionBanner() {
+  const nodeVersion = useQuery(udfs.node.version);
+  const usingNode18 = nodeVersion === "nodejs18.x";
+
+  if (usingNode18) {
+    return (
+      <div className="border-y bg-background-warning py-2 text-center text-content-warning">
+        This deployment is using Node 18 and will be automatically upgraded to
+        Node 20 on October 22, 2025. To manually configure the Node version,
+        visit the{" "}
+        <Link
+          href="https://docs.convex.dev/production/project-configuration#configuring-the-nodejs-version"
+          className="text-content-link hover:underline"
+        >
+          docs
+        </Link>
+        .
+      </div>
+    );
+  }
+
+  return null;
 }
 
 function EmbeddedConvexLogo({ collapsed }: { collapsed: boolean }) {

@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     str::FromStr,
     sync::LazyLock,
 };
@@ -68,7 +69,7 @@ impl AuthInfo {
             if issuer.starts_with("https://") || issuer.starts_with("http://") {
                 issuer.to_string()
             } else {
-                format!("https://{}", issuer)
+                format!("https://{issuer}")
             };
 
         // Some authentication providers (Auth0, lookin' at you) tell developers that
@@ -199,7 +200,16 @@ impl TryFrom<SerializedAuthInfo> for AuthInfo {
 
 static PROTOCOL_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\w+://").unwrap());
 
+fn invalid_provider_domain_url(msg: impl Into<Cow<'static, str>>) -> ErrorMetadata {
+    ErrorMetadata::bad_request("InvalidProviderDomainUrl", msg)
+}
+
 fn deserialize_issuer_url(original_url: String) -> anyhow::Result<IssuerUrl> {
+    if original_url.starts_with("\"") {
+        anyhow::bail!(invalid_provider_domain_url(format!(
+            "Invalid provider domain URL \"{original_url}\": starts with a double quote (\")"
+        )));
+    }
     let (had_scheme, url) = if PROTOCOL_REGEX.is_match(&original_url) {
         (true, original_url.clone())
     } else {
@@ -207,25 +217,21 @@ fn deserialize_issuer_url(original_url: String) -> anyhow::Result<IssuerUrl> {
     };
     if url.starts_with("http://") {
         let parsed_url = IssuerUrl::new(url)?;
-        if parsed_url.url().host_str() == Some("localhost")
-            || parsed_url.url().host_str() == Some("127.0.0.1")
-        {
-            return Ok(parsed_url);
-        } else {
-            anyhow::bail!("Invalid provider domain URL \"{original_url}\": must use HTTPS");
-        }
+        return Ok(parsed_url);
     };
     if !url.starts_with("https://") {
-        anyhow::bail!("Invalid provider domain URL \"{original_url}\": must use HTTPS");
+        anyhow::bail!(invalid_provider_domain_url(format!(
+            "Invalid provider domain URL \"{original_url}\": must use HTTPS"
+        )));
     }
     let parsed_url = IssuerUrl::new(url)?;
     // Check if the input really looks like a URL,
     // to catch mistakes (e.g. putting random tokens in the domain field)
     if !had_scheme && !parsed_url.url().host_str().is_some_and(ends_with_tld) {
-        anyhow::bail!(
+        anyhow::bail!(invalid_provider_domain_url(format!(
             "Invalid provider domain URL \"{original_url}\": Does not look like a URL (must have \
              a scheme or end with a top-level domain)"
-        );
+        )));
     }
 
     Ok(parsed_url)
@@ -369,9 +375,9 @@ mod tests {
     }
 
     #[test]
-    fn test_auth_info_http_fails() -> anyhow::Result<()> {
+    fn test_auth_info_file_fails() -> anyhow::Result<()> {
         let serialized = serde_json::from_str::<SerializedAuthInfo>(
-            r#"{"applicationID": "123", "domain": "http://example.com"}"#,
+            r#"{"applicationID": "123", "domain": "file://example.com"}"#,
         )?;
         AuthInfo::try_from(serialized).unwrap_err();
         Ok(())
@@ -396,12 +402,6 @@ mod tests {
             panic!("Expected Oidc AuthInfo");
         };
         assert_eq!(domain.to_string(), "http://127.0.0.1:3211");
-
-        // fails because host is not localhost
-        let serialized = serde_json::from_str::<SerializedAuthInfo>(
-            r#"{"applicationID": "123", "domain": "http://localhost.foo.com:3211"}"#,
-        )?;
-        AuthInfo::try_from(serialized).unwrap_err();
 
         Ok(())
     }

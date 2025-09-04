@@ -203,7 +203,7 @@ function ChartRow({
   const linkContents = (
     <div className="group relative flex h-10 py-1">
       <div role="cell" className="relative flex grow">
-        <div className="absolute left-0 top-0 flex h-full w-full items-center">
+        <div className="absolute top-0 left-0 flex h-full w-full items-center">
           {nonZeroValues.map(([value, index], i) => (
             <div
               className={classNames(
@@ -220,7 +220,7 @@ function ChartRow({
           ))}
         </div>
 
-        <div className="absolute left-0 top-0 flex h-full w-full items-center text-sm">
+        <div className="absolute top-0 left-0 flex h-full w-full items-center text-sm">
           <div className="truncate px-4">
             {isCloudBackups ? (
               <span className="flex items-center gap-1.5">
@@ -265,7 +265,7 @@ function ChartRow({
 
       <div
         role="cell"
-        className="flex w-24 items-center justify-end whitespace-nowrap px-4 tabular-nums"
+        className="flex w-24 items-center justify-end px-4 whitespace-nowrap tabular-nums"
       >
         {formatQuantityCompact(row.value, quantityType)}
       </div>
@@ -378,7 +378,7 @@ function DeploymentTypeIndicator({
         </>
       );
     default: {
-      const _typecheck: never = deploymentType;
+      deploymentType satisfies never;
       return null;
     }
   }
@@ -411,7 +411,7 @@ function useOrderedAndGroupedRows(
         const { componentPath } = row;
         let key;
         let deployment = null;
-        const isSystem = row.function.startsWith("_system");
+        const isSystem = row.function.startsWith("_system/");
         const isCloudBackups = row.function === "_system_job/cloud_backup";
         const name = isSystem ? "" : row.function;
         if (project) {

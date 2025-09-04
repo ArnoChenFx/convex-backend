@@ -66,7 +66,7 @@ impl TableNamespace {
 // TabletIdAndTableNumber. This only includes active tables and hidden tables
 // (i.e. not deleted tables).
 // Use is_active to determine if a table is active.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TableMapping {
     /// Maps from tablet to number and name exist for all tablets.
     tablet_to_table: OrdMap<TabletId, (TableNamespace, TableNumber, TableName)>,
@@ -219,6 +219,15 @@ impl TableMapping {
         self.tablet_to_table
             .get(&id)
             .map(|(namespace, ..)| *namespace)
+            .with_context(|| format!("cannot find table {id:?}"))
+    }
+
+    pub fn get_table_metadata(
+        &self,
+        id: TabletId,
+    ) -> anyhow::Result<&(TableNamespace, TableNumber, TableName)> {
+        self.tablet_to_table
+            .get(&id)
             .with_context(|| format!("cannot find table {id:?}"))
     }
 

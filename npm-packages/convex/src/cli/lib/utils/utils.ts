@@ -7,13 +7,13 @@ import { ProjectConfig } from "../config.js";
 import { spawn } from "child_process";
 import { InvalidArgumentError } from "commander";
 import fetchRetryFactory, { RequestInitRetryParams } from "fetch-retry";
+import { Context, ErrorType } from "../../../bundler/context.js";
 import {
-  Context,
-  ErrorType,
+  failExistingSpinner,
   logError,
   logMessage,
   logWarning,
-} from "../../../bundler/context.js";
+} from "../../../bundler/log.js";
 import { version } from "../../version.js";
 import { Project } from "../api.js";
 import { promptOptions, promptSearch, promptYesNo } from "./prompts.js";
@@ -21,6 +21,8 @@ import {
   bigBrainEnableFeatureMetadata,
   projectHasExistingCloudDev,
 } from "../localDeployment/bigBrain.js";
+import type { paths as ManagementPaths } from "../../generatedApi.js";
+import createClient from "openapi-fetch";
 
 const retryingFetch = fetchRetryFactory(fetch);
 
@@ -171,10 +173,9 @@ export async function logAndHandleFetchError(
   ctx: Context,
   err: unknown,
 ): Promise<never> {
-  if (ctx.spinner) {
-    // Fail the spinner so the stderr lines appear
-    ctx.spinner.fail();
-  }
+  // Fail the spinner so the stderr lines appear
+  failExistingSpinner();
+
   if (err instanceof ThrowingFetchError) {
     return await err.handle(ctx);
   } else {
@@ -192,7 +193,7 @@ function logDeprecationWarning(ctx: Context, deprecationMessage: string) {
     return;
   }
   ctx.deprecationMessagePrinted = true;
-  logWarning(ctx, chalk.yellow(deprecationMessage));
+  logWarning(chalk.yellow(deprecationMessage));
 }
 
 async function checkFetchErrorForDeprecation(ctx: Context, resp: Response) {
@@ -385,11 +386,15 @@ export async function hasProject(
   projectSlug: string,
 ) {
   try {
-    const projects: Project[] = await bigBrainAPIMaybeThrows({
-      ctx,
-      method: "GET",
-      url: `teams/${teamSlug}/projects`,
-    });
+    const projects: Project[] = (
+      await typedBigBrainClient(ctx).GET("/teams/{team_slug}/projects", {
+        params: {
+          path: {
+            team_slug: teamSlug,
+          },
+        },
+      })
+    ).data!;
     return !!projects.find((project) => project.slug === projectSlug);
   } catch {
     return false;
@@ -407,11 +412,15 @@ export async function validateOrSelectProject(
   singleProjectPrompt: string,
   multiProjectPrompt: string,
 ): Promise<string | null> {
-  const projects: Project[] = await bigBrainAPI({
-    ctx,
-    method: "GET",
-    url: `teams/${teamSlug}/projects`,
-  });
+  const projects: Project[] = (
+    await typedBigBrainClient(ctx).GET("/teams/{team_slug}/projects", {
+      params: {
+        path: {
+          team_slug: teamSlug,
+        },
+      },
+    })
+  ).data!;
   if (projects.length === 0) {
     return await ctx.crash({
       exitCode: 1,
@@ -574,8 +583,13 @@ export function cacheDir() {
   return path.join(os.homedir(), ".cache", name);
 }
 
+/**
+ * Fetch with appropriate headers for the Convex Management API.
+ *
+ * This fetch() also has retries and throws if the response is not ok.
+ */
 export async function bigBrainFetch(ctx: Context): Promise<typeof fetch> {
-  const authHeader = await ctx.bigBrainAuth()?.header;
+  const authHeader = ctx.bigBrainAuth()?.header;
   const bigBrainHeaders: Record<string, string> = authHeader
     ? {
         Authorization: authHeader,
@@ -614,7 +628,7 @@ export async function bigBrainAPI<T = any>({
   data,
 }: {
   ctx: Context;
-  method: string;
+  method: "GET" | "POST" | "HEAD";
   url: string;
   data?: any;
 }): Promise<T> {
@@ -636,6 +650,60 @@ export async function bigBrainAPI<T = any>({
   }
 }
 
+/**
+ * Typed API client with a fetch() implemention that includes retries and crashes on errors.
+ * It is always safe to call `.data!` on the response: any error would throw or crash.
+ *
+ * Pass { throw: true } to throw ThrowingFetchErrors instead of exiting the process.
+ */
+export function typedBigBrainClient(
+  ctx: Context,
+  options: { throw?: boolean } = {},
+) {
+  const bigBrainClient = createClient<ManagementPaths>({
+    baseUrl: BIG_BRAIN_URL,
+    fetch: async (
+      resource: Request,
+      options?: RequestInit,
+    ): Promise<Response> => {
+      const fetch = await bigBrainFetch(ctx);
+      return fetch(resource, options);
+    },
+  });
+
+  // Wrap the client with error handling - go back to proxy since middleware doesn't catch parsing errors
+  return new Proxy(bigBrainClient, {
+    get(target, prop) {
+      const originalMethod = target[prop as keyof typeof target];
+
+      if (
+        prop === "GET" ||
+        prop === "POST" ||
+        prop === "HEAD" ||
+        prop === "OPTIONS" ||
+        prop === "PUT" ||
+        prop === "DELETE" ||
+        prop === "PATCH" ||
+        prop === "TRACE"
+      ) {
+        return async (...args: any[]) => {
+          try {
+            return await (originalMethod as Function).apply(target, args);
+          } catch (err: unknown) {
+            if (options.throw) {
+              // eslint-disable-next-line no-restricted-syntax
+              throw err;
+            }
+            return await logAndHandleFetchError(ctx, err);
+          }
+        };
+      }
+
+      return originalMethod;
+    },
+  });
+}
+
 export async function bigBrainAPIMaybeThrows({
   ctx,
   method,
@@ -643,14 +711,14 @@ export async function bigBrainAPIMaybeThrows({
   data,
 }: {
   ctx: Context;
-  method: string;
+  method: "GET" | "POST" | "HEAD";
   url: string;
   data?: any;
 }): Promise<any> {
   const fetch = await bigBrainFetch(ctx);
   const dataString =
     data === undefined
-      ? method === "POST" || method === "post"
+      ? method === "POST"
         ? JSON.stringify({})
         : undefined
       : typeof data === "string"
@@ -660,7 +728,7 @@ export async function bigBrainAPIMaybeThrows({
     method,
     ...(dataString ? { body: dataString } : {}),
     headers:
-      method === "POST" || method === "post"
+      method === "POST"
         ? {
             "Content-Type": "application/json",
           }
@@ -858,10 +926,10 @@ export function spawnAsync(
 
     if (pipeOutput) {
       child.stdout.on("data", (text) =>
-        logMessage(ctx, text.toString("utf-8").trimEnd()),
+        logMessage(text.toString("utf-8").trimEnd()),
       );
       child.stderr.on("data", (text) =>
-        logError(ctx, text.toString("utf-8").trimEnd()),
+        logError(text.toString("utf-8").trimEnd()),
       );
     } else {
       child.stdout.on("data", (data) => {
@@ -1020,7 +1088,6 @@ export function bareDeploymentFetch(
     onError?.(err);
     if (attempt >= RETRY_LOG_THRESHOLD) {
       logMessage(
-        ctx,
         chalk.gray(`Retrying request (attempt ${attempt}/${MAX_RETRIES})...`),
       );
     }
@@ -1060,7 +1127,6 @@ export function deploymentFetch(
     onError?.(err);
     if (attempt >= RETRY_LOG_THRESHOLD) {
       logMessage(
-        ctx,
         chalk.gray(`Retrying request (attempt ${attempt}/${MAX_RETRIES})...`),
       );
     }
@@ -1095,7 +1161,7 @@ export function deploymentFetch(
 
 /**
  * Whether this is likely to be a WebContainer,
- * WebContainers can't complete the Auth0 login but where that login flow
+ * WebContainers can't complete the WorkOS  login but where that login flow
  * fails has changed with the environment.
  */
 export function isWebContainer(): boolean {

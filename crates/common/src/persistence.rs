@@ -42,6 +42,7 @@ use crate::{
     runtime::Runtime,
     types::{
         DatabaseIndexUpdate,
+        DatabaseIndexValue,
         IndexId,
         PersistenceVersion,
         RepeatableReason,
@@ -56,6 +57,30 @@ pub struct DocumentLogEntry {
     pub id: InternalDocumentId,
     pub value: Option<ResolvedDocument>,
     pub prev_ts: Option<Timestamp>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct PersistenceIndexEntry {
+    pub ts: Timestamp,
+    pub index_id: IndexId,
+    pub key: IndexKeyBytes,
+    pub value: Option<InternalDocumentId>,
+}
+
+impl PersistenceIndexEntry {
+    pub fn from_index_update(ts: Timestamp, update: DatabaseIndexUpdate) -> Self {
+        Self {
+            ts,
+            index_id: update.index_id,
+            key: update.key.to_bytes(),
+            value: match update.value {
+                DatabaseIndexValue::Deleted => None,
+                DatabaseIndexValue::NonClustered(id) => {
+                    Some(InternalDocumentId::new(id.tablet_id, id.internal_id()))
+                },
+            },
+        }
+    }
 }
 
 pub type DocumentStream<'a> = BoxStream<'a, anyhow::Result<DocumentLogEntry>>;
@@ -185,7 +210,7 @@ pub trait Persistence: Sync + Send + 'static {
     async fn write(
         &self,
         documents: Vec<DocumentLogEntry>,
-        indexes: BTreeSet<(Timestamp, DatabaseIndexUpdate)>,
+        indexes: BTreeSet<PersistenceIndexEntry>,
         conflict_strategy: ConflictStrategy,
     ) -> anyhow::Result<()>;
 
@@ -216,6 +241,31 @@ pub trait Persistence: Sync + Send + 'static {
 
     // No-op by default. Persistence implementation can override.
     async fn shutdown(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn import_documents_batch(
+        &self,
+        mut documents: BoxStream<'_, Vec<DocumentLogEntry>>,
+    ) -> anyhow::Result<()> {
+        while let Some(chunk) = documents.next().await {
+            self.write(chunk, BTreeSet::new(), ConflictStrategy::Error)
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn import_indexes_batch(
+        &self,
+        mut indexes: BoxStream<'_, BTreeSet<PersistenceIndexEntry>>,
+    ) -> anyhow::Result<()> {
+        while let Some(chunk) = indexes.next().await {
+            self.write(vec![], chunk, ConflictStrategy::Error).await?;
+        }
+        Ok(())
+    }
+
+    async fn finish_loading(&self) -> anyhow::Result<()> {
         Ok(())
     }
 }
@@ -465,7 +515,7 @@ pub trait PersistenceReader: Send + Sync + 'static {
     /// Returns all timestamps and documents in ascending (ts, tablet_id, id)
     /// order. Only should be used for testing
     #[cfg(any(test, feature = "testing"))]
-    fn load_all_documents(&self) -> DocumentStream {
+    fn load_all_documents(&self) -> DocumentStream<'_> {
         self.load_documents(
             TimestampRange::all(),
             Order::Asc,
@@ -815,7 +865,7 @@ pub struct PersistenceTableSize {
     pub table_name: String,
     pub data_bytes: u64,
     pub index_bytes: u64,
-    pub row_count: u64,
+    pub row_count: Option<u64>,
 }
 
 #[cfg(test)]

@@ -110,16 +110,24 @@ fn strip_pii(err: &mut anyhow::Error) {
 ///
 /// Other parts of codebase should not use the `sentry_anyhow` crate directly!
 pub async fn report_error(err: &mut anyhow::Error) {
+    // Trace error before yield - since during shutdown, we won't be back.
+    trace_error(err);
+
     // Yield in case this is during shutdown - at which point, errors being reported
     // explicitly aren't useful. Yielding allows tokio to complete a cancellation.
     tokio::task::yield_now().await;
 
-    report_error_sync(err);
+    report_error_sync_no_tracing(err);
 }
 
 /// Use the `pub async fn report_error` above if possible to log an error to
 /// sentry. This is a synchronous version for use in sync contexts.
 pub fn report_error_sync(err: &mut anyhow::Error) {
+    trace_error(err);
+    report_error_sync_no_tracing(err);
+}
+
+fn trace_error(err: &mut anyhow::Error) {
     strip_pii(err);
     if let Some(label) = err.metric_server_error_label() {
         log_errors_reported_total(label);
@@ -131,7 +139,9 @@ pub fn report_error_sync(err: &mut anyhow::Error) {
         module_path!(),
     );
     tracing::debug!("{err:?}");
+}
 
+fn report_error_sync_no_tracing(err: &mut anyhow::Error) {
     if let Some(e) = err.downcast_mut::<ErrorMetadata>() {
         if let Some(counter) = e.custom_metric() {
             log_counter(counter, 1);
@@ -217,9 +227,9 @@ fn event_from_error(err: &anyhow::Error) -> sentry::protocol::Event<'static> {
 /// be part of the new error.
 ///
 /// See https://docs.rs/anyhow/latest/anyhow/struct.Error.html#display-representations
-pub fn recapture_stacktrace(mut err: anyhow::Error) -> anyhow::Error {
+pub async fn recapture_stacktrace(mut err: anyhow::Error) -> anyhow::Error {
     let new_error = recapture_stacktrace_noreport(&err);
-    report_error_sync(&mut err); // report original error, mutating it to strip pii
+    report_error(&mut err).await; // report original error, mutating it to strip pii
     new_error
 }
 

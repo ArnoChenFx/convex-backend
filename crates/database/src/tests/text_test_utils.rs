@@ -30,7 +30,6 @@ use common::{
     types::{
         GenericIndexName,
         IndexDescriptor,
-        IndexId,
         IndexName,
         TabletIndexName,
     },
@@ -49,6 +48,7 @@ use storage::Storage;
 use sync_types::Timestamp;
 use value::{
     assert_obj,
+    DeveloperDocumentId,
     FieldPath,
     ResolvedDocumentId,
     TableName,
@@ -56,7 +56,11 @@ use value::{
 };
 
 use crate::{
-    index_workers::search_compactor::CompactionConfig,
+    bootstrap_model::index_backfills::IndexBackfillModel,
+    search_index_workers::{
+        search_compactor::CompactionConfig,
+        FlusherType,
+    },
     test_helpers::{
         DbFixtures,
         DbFixturesArgs,
@@ -75,6 +79,7 @@ use crate::{
         TextIndexMetadataWriter,
     },
     Database,
+    IndexBackfillMetadata,
     IndexModel,
     ResolvedQuery,
     TestFacingModel,
@@ -151,16 +156,31 @@ impl TextFixtures {
             self.storage.clone(),
             self.segment_term_metadata_fetcher.clone(),
             self.writer.clone(),
+            FlusherType::Backfill,
         )
     }
 
-    pub fn new_search_flusher(&self) -> TextIndexFlusher<TestRuntime> {
+    pub fn new_backfill_text_flusher(&self) -> TextIndexFlusher<TestRuntime> {
         self.new_search_flusher_builder().set_soft_limit(0).build()
     }
 
-    pub fn new_search_flusher_with_soft_limit(&self) -> TextIndexFlusher<TestRuntime> {
+    pub fn new_live_text_flusher(&self) -> TextIndexFlusher<TestRuntime> {
+        self.new_search_flusher_builder()
+            .set_soft_limit(0)
+            .set_live_flush()
+            .build()
+    }
+
+    pub fn new_backfill_flusher_with_soft_limit(&self) -> TextIndexFlusher<TestRuntime> {
         self.new_search_flusher_builder()
             .set_soft_limit(2048)
+            .build()
+    }
+
+    pub fn new_live_flusher_with_soft_limit(&self) -> TextIndexFlusher<TestRuntime> {
+        self.new_search_flusher_builder()
+            .set_soft_limit(2048)
+            .set_live_flush()
             .build()
     }
 
@@ -193,6 +213,16 @@ impl TextFixtures {
         Ok(index_data)
     }
 
+    pub async fn index_backfill_progress(
+        &self,
+        index_id: DeveloperDocumentId,
+    ) -> anyhow::Result<Option<Arc<ParsedDocument<IndexBackfillMetadata>>>> {
+        let mut tx = self.db.begin_system().await?;
+        IndexBackfillModel::new(&mut tx)
+            .existing_backfill_metadata(index_id)
+            .await
+    }
+
     pub async fn backfill(&self) -> anyhow::Result<()> {
         backfill_text_indexes(
             self.rt.clone(),
@@ -212,7 +242,10 @@ impl TextFixtures {
             .into_value();
         must_let!(let IndexMetadata {
             config: IndexConfig::Text {
-                on_disk_state: TextIndexState::Backfilled(TextIndexSnapshot { ts, .. }),
+                on_disk_state: TextIndexState::Backfilled {
+                    snapshot: TextIndexSnapshot { ts, .. },
+                    staged: _,
+                },
                 ..
             },
             ..
@@ -236,7 +269,7 @@ impl TextFixtures {
 
         let resolved_index_name = TabletIndexName::new(table_id, index_name.descriptor().clone())?;
         Ok(IndexData {
-            index_id: index_id.internal_id(),
+            index_id,
             resolved_index_name,
             index_name: index_name.clone(),
             namespace: self.namespace,
@@ -273,9 +306,8 @@ impl TextFixtures {
         must_let!(let IndexConfig::Text { on_disk_state, .. } = &metadata.config);
         let snapshot = match on_disk_state {
             TextIndexState::Backfilling(_) => anyhow::bail!("Still backfilling!"),
-            TextIndexState::Backfilled(snapshot) | TextIndexState::SnapshottedAt(snapshot) => {
-                snapshot
-            },
+            TextIndexState::Backfilled { snapshot, .. }
+            | TextIndexState::SnapshottedAt(snapshot) => snapshot,
         };
         must_let!(let TextIndexSnapshotData::MultiSegment(segments) = &snapshot.data);
         Ok(segments.clone())
@@ -354,7 +386,7 @@ impl TextFixtures {
         pause: PauseController,
         label: &'static str,
     ) -> anyhow::Result<()> {
-        let mut flusher = self.new_search_flusher();
+        let flusher = self.new_live_text_flusher();
         let hold_guard = pause.hold(label);
         let flush = flusher.step();
         let compactor = self.new_compactor();
@@ -377,7 +409,7 @@ const TABLE_NAME: &str = "table";
 const SEARCH_FIELD: &str = "text";
 
 pub struct IndexData {
-    pub index_id: IndexId,
+    pub index_id: ResolvedDocumentId,
     pub index_name: IndexName,
     pub resolved_index_name: TabletIndexName,
     pub namespace: TableNamespace,

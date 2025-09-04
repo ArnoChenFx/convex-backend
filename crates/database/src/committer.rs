@@ -48,6 +48,7 @@ use common::{
         DocumentLogEntry,
         Persistence,
         PersistenceGlobalKey,
+        PersistenceIndexEntry,
         PersistenceReader,
         RepeatablePersistence,
         RetentionValidator,
@@ -73,10 +74,7 @@ use common::{
     },
     value::ResolvedDocumentId,
 };
-use errors::{
-    ErrorMetadata,
-    ErrorMetadataAnyhowExt,
-};
+use errors::ErrorMetadata;
 use fastrace::prelude::*;
 use futures::{
     future::{
@@ -807,9 +805,14 @@ impl<RT: Runtime> Committer<RT> {
                 prev_ts: write.prev_ts,
             })
             .collect();
+        let index_writes = index_writes
+            .into_iter()
+            .map(|(ts, update)| PersistenceIndexEntry::from_index_update(ts, update))
+            .collect();
         persistence
             .write(document_writes, index_writes, ConflictStrategy::Error)
-            .await?;
+            .await
+            .context("Commit failed to write to persistence")?;
 
         timer.finish();
         Ok(())
@@ -1110,7 +1113,7 @@ impl CommitterClient {
         &self,
         transaction: Transaction<RT>,
         write_source: WriteSource,
-    ) -> BoxFuture<anyhow::Result<Timestamp>> {
+    ) -> BoxFuture<'_, anyhow::Result<Timestamp>> {
         self._commit(transaction, write_source).boxed()
     }
 
@@ -1143,13 +1146,7 @@ impl CommitterClient {
             anyhow::bail!(metrics::shutdown_error());
         };
         if let Err(e) = result {
-            // For OCC and other known commit failure error types,
-            // replace the committer's stacktrace with the caller's stack trace as
-            // that will be more helpful
-            if e.is_occ() {
-                return Err(recapture_stacktrace(e));
-            }
-            return Err(e);
+            return Err(recapture_stacktrace(e).await);
         }
         result
     }

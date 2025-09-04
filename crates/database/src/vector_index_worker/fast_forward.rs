@@ -18,7 +18,7 @@ use crate::{
         IndexWorkerMetadataModel,
         IndexWorkerMetadataRecord,
     },
-    index_workers::fast_forward::IndexFastForward,
+    search_index_workers::fast_forward::IndexFastForward,
     Snapshot,
     Transaction,
 };
@@ -39,9 +39,8 @@ impl<RT: Runtime> IndexFastForward<RT, ()> for VectorFastForward {
             return None;
         };
         let VectorIndexSnapshot { ts, .. } = match on_disk_state {
-            VectorIndexState::SnapshottedAt(snapshot) | VectorIndexState::Backfilled(snapshot) => {
-                snapshot
-            },
+            VectorIndexState::SnapshottedAt(snapshot)
+            | VectorIndexState::Backfilled { snapshot, .. } => snapshot,
             VectorIndexState::Backfilling(_) => return None,
         };
         Some((*ts, ()))
@@ -86,7 +85,7 @@ mod tests {
 
     use crate::{
         bootstrap_model::index_workers::IndexWorkerMetadataModel,
-        index_workers::fast_forward::{
+        search_index_workers::fast_forward::{
             FastForwardIndexWorker,
             LastFastForwardInfo,
         },
@@ -127,7 +126,7 @@ mod tests {
             namespace,
             ..
         } = backfilling_vector_index_with_doc(&database).await?;
-        let mut worker = fixtures.new_index_flusher()?;
+        let worker = fixtures.new_backfill_index_flusher()?;
 
         // Backfill
         let (metrics, _) = worker.step().await?;

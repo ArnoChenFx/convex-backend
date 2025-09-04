@@ -176,6 +176,22 @@ impl<'a, RT: Runtime> TableModel<'a, RT> {
         doc.map(|metadata| metadata.map_table(&self.tx.table_mapping().tablet_to_name()))
     }
 
+    pub(crate) fn doc_table_name_to_id(
+        &mut self,
+        namespace: TableNamespace,
+        doc: ParsedDocument<DeveloperIndexMetadata>,
+    ) -> anyhow::Result<ParsedDocument<TabletIndexMetadata>> {
+        doc.map(|metadata| {
+            metadata.map_table(
+                &self
+                    .tx
+                    .table_mapping()
+                    .namespace(namespace)
+                    .name_to_tablet(),
+            )
+        })
+    }
+
     pub fn table_exists(&mut self, namespace: TableNamespace, table: &TableName) -> bool {
         self.tx
             .table_mapping()
@@ -561,10 +577,9 @@ impl<'a, RT: Runtime> TableModel<'a, RT> {
         &mut self,
         namespace: TableNamespace,
         table: &TableName,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<TabletIdAndTableNumber> {
         self._insert_table_metadata(namespace, table, None, TableState::Active)
-            .await?;
-        Ok(())
+            .await
     }
 }
 #[cfg(test)]

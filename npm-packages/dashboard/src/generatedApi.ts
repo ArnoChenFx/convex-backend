@@ -4,49 +4,14 @@
  */
 
 export interface paths {
-    "/authorize": {
+    "/profile_emails/list": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        /** This endpoint is a placeholder for generating our own access tokens.
-         *     Right now, it is a no-op for the token.
-         *     Version 1 of the token is the Auth0 access token */
-        post: operations["authorize_device"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/authorize_app": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["authorize_app"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/cloud_backups/{cloud_backup_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_cloud_backup"];
+        get: operations["list_profile_emails"];
         put?: never;
         post?: never;
         delete?: never;
@@ -55,7 +20,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/cloud_backups/{cloud_backup_id}/cancel": {
+    "/profile_emails/create": {
         parameters: {
             query?: never;
             header?: never;
@@ -64,14 +29,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["cancel_cloud_backup"];
+        post: operations["create_profile_email"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/cloud_backups/{cloud_backup_id}/delete": {
+    "/profile_emails/delete": {
         parameters: {
             query?: never;
             header?: never;
@@ -80,30 +45,46 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["delete_cloud_backup"];
+        post: operations["delete_profile_email"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/create_project": {
+    "/member_data": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["get_member_data"];
         put?: never;
-        post: operations["create_project_and_provision_deployment"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/delete_access_token": {
+    "/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_profile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile_emails/resend_verification": {
         parameters: {
             query?: never;
             header?: never;
@@ -112,7 +93,55 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["delete_access_token"];
+        post: operations["resend_verification_email"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile_emails/update_primary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["update_primary_profile_email"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/update_profile_name": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["update_profile_name"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile_emails/verify/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["verify_profile_email"];
         delete?: never;
         options?: never;
         head?: never;
@@ -129,6 +158,262 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["delete_account"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/optins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["dashboard_get_opt_ins"];
+        put: operations["dashboard_accept_opt_ins"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_teams_for_member"];
+        put?: never;
+        post: operations["create_team"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_members_for_team"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/remove_member": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["remove_member_from_team"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/get_entitlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_team_entitlements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["update_team"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["delete_team"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/apply_referral_code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["apply_referral_code"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/validate_referral_code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["validate_referral_code"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/referral_state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_referral_state_for_team"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_projects_for_team"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/usage/team_usage_state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_team_usage_state"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/unpause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["unpause_deployments"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/get_audit_log_events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_audit_log_events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_project"];
+        put: operations["update_project"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/instances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_deployments_for_project"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -167,7 +452,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/deployments/{deployment_id}/configure_periodic_backup": {
+    "/create_project": {
         parameters: {
             query?: never;
             header?: never;
@@ -176,14 +461,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["configure_periodic_backup"];
+        post: operations["create_project_and_provision_deployment"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/deployments/{deployment_id}/disable_periodic_backup": {
+    "/projects/{project_id}/transfer": {
         parameters: {
             query?: never;
             header?: never;
@@ -192,23 +477,103 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["disable_periodic_backup"];
+        post: operations["transfer_project"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/deployments/{deployment_id}/get_periodic_backup_config": {
+    "/instances/{deployment_name}/auth": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["get_periodic_backup_config"];
+        get?: never;
+        put?: never;
+        post: operations["get_deployment_auth_dashboard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/provision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["provision_deployment_dashboard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/deployments/{deployment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_deployment_by_id"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/update_member_role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["update_member_role"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/get_project_roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_project_roles_for_team"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/update_project_roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["update_project_roles"];
         delete?: never;
         options?: never;
         head?: never;
@@ -247,6 +612,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/teams/{team_id}/list_cloud_backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_cloud_backups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cloud_backups/{cloud_backup_id}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["delete_cloud_backup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cloud_backups/{cloud_backup_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_cloud_backup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cloud_backups/{cloud_backup_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["cancel_cloud_backup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployments/{deployment_id}/get_periodic_backup_config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_periodic_backup_config"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployments/{deployment_id}/configure_periodic_backup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["configure_periodic_backup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployments/{deployment_id}/disable_periodic_backup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["disable_periodic_backup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/discord/accounts": {
         parameters: {
             query?: never;
@@ -255,6 +732,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["get_discord_accounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/discord/login_url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_discord_login_url"];
         put?: never;
         post?: never;
         delete?: never;
@@ -279,22 +772,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/discord/login_url": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_discord_login_url"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/discord/unlink": {
         parameters: {
             query?: never;
@@ -305,38 +782,6 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["unlink_discord_account"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/instances/{deployment_name}/access_tokens": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_deployment_access_tokens"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/instances/{deployment_name}/auth": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["get_deployment_auth_dashboard"];
         delete?: never;
         options?: never;
         head?: never;
@@ -391,7 +836,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/invites/{code}/accept": {
+    "/rename_token": {
         parameters: {
             query?: never;
             header?: never;
@@ -400,14 +845,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["accept_invitation"];
+        post: operations["rename_access_token"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/link_identity": {
+    "/delete_access_token": {
         parameters: {
             query?: never;
             header?: never;
@@ -416,23 +861,21 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Link a secondary identity to a user's account */
-        post: operations["link_identity"];
+        post: operations["delete_access_token"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/list_identities": {
+    "/teams/{team_id}/access_tokens": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** @description List all identities for a user */
-        get: operations["list_identities"];
+        get: operations["get_team_access_tokens"];
         put?: never;
         post?: never;
         delete?: never;
@@ -441,14 +884,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/member_data": {
+    "/teams/{team_id}/app_access_tokens": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["get_member_data"];
+        get: operations["get_team_app_access_tokens"];
         put?: never;
         post?: never;
         delete?: never;
@@ -457,143 +900,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/optins": {
+    "/instances/{deployment_name}/access_tokens": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["dashboard_get_opt_ins"];
-        put: operations["dashboard_accept_opt_ins"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/profile": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_profile"];
+        get: operations["get_deployment_access_tokens"];
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/profile_emails/create": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["create_profile_email"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/profile_emails/delete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["delete_profile_email"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/profile_emails/list": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["list_profile_emails"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/profile_emails/resend_verification": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["resend_verification_email"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/profile_emails/update_primary": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["update_primary_profile_email"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/profile_emails/verify/{code}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["verify_profile_email"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/projects/{project_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_project"];
-        put: operations["update_project"];
         post?: never;
         delete?: never;
         options?: never;
@@ -625,6 +940,361 @@ export interface paths {
             cookie?: never;
         };
         get: operations["get_project_app_access_tokens"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/delete_access_token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["delete_team_access_token"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** This endpoint is a placeholder for generating our own access tokens.
+         *     Right now, it is a no-op for the token.
+         *     Version 1 of the token is the WorkOS access token */
+        post: operations["authorize_device"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/authorize_app": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["authorize_app"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/invites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["pending_invitations_for_team"];
+        put?: never;
+        post: operations["create_invitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/invites/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["cancel_invitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invites/{code}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["accept_invitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/cancel_orb_subscription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["cancel_orb_subscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/change_subscription_plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["change_subscription_plan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/create_subscription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["create_subscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/get_discounted_plan/{plan_id}/{promo_code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_discounted_plan"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/get_orb_subscription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_orb_subscription"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/list_active_plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_active_plans"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/list_invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_invoices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/unschedule_cancel_orb_subscription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["unschedule_cancel_orb_subscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/update_billing_address": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["update_billing_address"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/update_billing_contact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["update_billing_contact"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/update_payment_method": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["update_payment_method"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/create_setup_intent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["create_setup_intent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/set_spending_limit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["set_spending_limit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/get_current_spend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_current_spend"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/get_spending_limits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_spending_limits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/preview_deployments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_preview_deployments_for_project"];
         put?: never;
         post?: never;
         delete?: never;
@@ -681,678 +1351,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/projects/{project_id}/instances": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["list_deployments_for_project"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/projects/{project_id}/preview_deployments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["list_preview_deployments_for_project"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/projects/{project_id}/provision": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["provision_deployment_dashboard"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/projects/{project_id}/transfer": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["transfer_project"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/rename_token": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["rename_access_token"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/set_jwt_cookie": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["set_jwt_cookie"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_teams_for_member"];
-        put?: never;
-        post: operations["create_team"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/delete_access_token": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["delete_team_access_token"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["update_team"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/access_tokens": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_team_access_tokens"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/apply_referral_code": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["apply_referral_code"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/cancel_orb_subscription": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["cancel_orb_subscription"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/change_subscription_plan": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["change_subscription_plan"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/create_setup_intent": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["create_setup_intent"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/create_subscription": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["create_subscription"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/delete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["delete_team"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/deployments/{deployment_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_deployment_by_id"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/get_audit_log_events": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_audit_log_events"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/get_current_spend": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_current_spend"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/get_discounted_plan/{plan_id}/{promo_code}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_discounted_plan"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/get_entitlements": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_team_entitlements"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/get_orb_subscription": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_orb_subscription"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/get_project_roles": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_project_roles_for_team"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/get_spending_limits": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_spending_limits"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/invites": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["pending_invitations_for_team"];
-        put?: never;
-        post: operations["create_invitation"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/invites/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["cancel_invitation"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/list_active_plans": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["list_active_plans"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/list_cloud_backups": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["list_cloud_backups"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/list_invoices": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["list_invoices"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/members": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_members_for_team"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/projects": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_projects_for_team"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/referral_state": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_referral_state_for_team"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/remove_member": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["remove_member_from_team"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/set_spending_limit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["set_spending_limit"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/unpause": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["unpause_deployments"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/unschedule_cancel_orb_subscription": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["unschedule_cancel_orb_subscription"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/update_billing_address": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put: operations["update_billing_address"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/update_billing_contact": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put: operations["update_billing_contact"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/update_member_role": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["update_member_role"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/update_payment_method": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put: operations["update_payment_method"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/update_project_roles": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["update_project_roles"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/teams/{team_id}/usage/current_billing_period": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_team_current_billing_period"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/teams/{team_id}/usage/query": {
         parameters: {
             query?: never;
@@ -1369,14 +1367,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/teams/{team_id}/usage/team_usage_state": {
+    "/teams/{team_id}/usage/current_billing_period": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["get_team_usage_state"];
+        get: operations["get_team_current_billing_period"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1434,7 +1432,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/update_primary_identity": {
+    "/list_identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description List all identities for a user */
+        get: operations["list_identities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description List simplified identities grouped by WorkOS user ID */
+        get: operations["identities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/oauth_apps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_oauth_apps_for_team"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/oauth_apps/check": {
         parameters: {
             query?: never;
             header?: never;
@@ -1443,15 +1491,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Change the primary identity for a user's account by unlinking and relinking. */
-        post: operations["update_primary_identity"];
+        post: operations["check_oauth_app"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/update_profile_name": {
+    "/teams/{team_id}/oauth_apps/register": {
         parameters: {
             query?: never;
             header?: never;
@@ -1459,24 +1506,56 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put: operations["update_profile_name"];
-        post?: never;
+        put?: never;
+        post: operations["register_oauth_app"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/validate_referral_code": {
+    "/teams/{team_id}/oauth_apps/{client_id}/update": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["validate_referral_code"];
+        get?: never;
         put?: never;
-        post?: never;
+        post: operations["update_oauth_app"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/oauth_apps/{client_id}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["delete_oauth_app"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/oauth_apps/{client_id}/regenerate_secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["regenerate_oauth_client_secret"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1501,6 +1580,7 @@ export interface components {
         /** @description Encrypted admin key */
         AdminKey: string;
         AppAccessTokenResponse: {
+            appClientId: string;
             appName: components["schemas"]["AppName"];
             /** Format: int64 */
             creationTime: number;
@@ -1513,7 +1593,7 @@ export interface components {
             referralCode: components["schemas"]["ReferralCode"];
         };
         /** @enum {string} */
-        AuditLogAction: "joinTeam" | "createTeam" | "updateTeam" | "deleteTeam" | "createProject" | "transferProject" | "receiveProject" | "updateProject" | "deleteProject" | "createProjectEnvironmentVariable" | "updateProjectEnvironmentVariable" | "deleteProjectEnvironmentVariable" | "createDeployment" | "deleteDeployment" | "inviteMember" | "cancelMemberInvitation" | "removeMember" | "updateMemberRole" | "updateMemberProjectRole" | "updatePaymentMethod" | "updateBillingContact" | "updateBillingAddress" | "createSubscription" | "resumeSubscription" | "cancelSubscription" | "changeSubscriptionPlan" | "createTeamAccessToken" | "updateTeamAccessToken" | "deleteTeamAccessToken" | "viewTeamAccessToken" | "createCustomDomain" | "deleteCustomDomain" | "startManualCloudBackup" | "restoreFromCloudBackup" | "configurePeriodicBackup" | "disablePeriodicBackup" | "deleteCloudBackup" | "disableTeamExceedingSpendingLimits" | "setSpendingLimit" | "applyReferralCode";
+        AuditLogAction: "joinTeam" | "createTeam" | "updateTeam" | "deleteTeam" | "createProject" | "transferProject" | "receiveProject" | "updateProject" | "deleteProject" | "createProjectEnvironmentVariable" | "updateProjectEnvironmentVariable" | "deleteProjectEnvironmentVariable" | "createDeployment" | "deleteDeployment" | "inviteMember" | "cancelMemberInvitation" | "removeMember" | "updateMemberRole" | "updateMemberProjectRole" | "updatePaymentMethod" | "updateBillingContact" | "updateBillingAddress" | "createSubscription" | "resumeSubscription" | "cancelSubscription" | "changeSubscriptionPlan" | "createTeamAccessToken" | "updateTeamAccessToken" | "deleteTeamAccessToken" | "viewTeamAccessToken" | "createCustomDomain" | "deleteCustomDomain" | "startManualCloudBackup" | "restoreFromCloudBackup" | "configurePeriodicBackup" | "disablePeriodicBackup" | "deleteCloudBackup" | "disableTeamExceedingSpendingLimits" | "setSpendingLimit" | "applyReferralCode" | "createOAuthApplication" | "updateOAuthApplication" | "deleteOAuthApplication" | "verifyOAuthApplication" | "generateOAuthClientSecret";
         /** @description Represents the `ValidatedActor` equivalent for audit logs. This identifies
          *     who executed an AuditLogEvent */
         AuditLogActor: "system" | {
@@ -1544,30 +1624,32 @@ export interface components {
             cursor?: string | null;
             events: components["schemas"]["AuditLogEventResponse"][];
         };
-        AuthIdentity: {
+        AuthIdentityResponse: {
             connection: string;
-            profileData: components["schemas"]["ProfileData"];
+            isPrimary: boolean;
+            parentUserId?: string | null;
             provider: string;
             userId: string;
         };
         AuthorizeAppArgs: {
-            /** @description Authentication token is expected to be the access token from auth0 */
+            /** @description Authentication token is expected to be the access token from WorkOS */
             authnToken: string;
             clientId: string;
             codeChallenge?: string | null;
             mode: components["schemas"]["AuthorizeAppMode"];
-            projectId: components["schemas"]["ProjectId"];
+            projectId?: null | components["schemas"]["ProjectId"];
             redirectUri: string;
+            teamId?: null | components["schemas"]["TeamId"];
         };
         /** @enum {string} */
         AuthorizeAppMode: "AuthorizationCode";
         AuthorizeArgs: {
             anonymousId?: string | null;
-            appName?: null | components["schemas"]["AppName"];
-            /** @description Authentication token is expected to be the access token from auth0 */
+            /** @description Authentication token is expected to be the access token from WorkOS */
             authnToken: string;
             deploymentId?: null | components["schemas"]["DeploymentId"];
             deviceName?: null | components["schemas"]["DeviceName"];
+            oauthApp?: null | components["schemas"]["OauthAppMetadata"];
             permissions?: string[] | null;
             projectId?: null | components["schemas"]["ProjectId"];
             teamId?: null | components["schemas"]["TeamId"];
@@ -1591,12 +1673,12 @@ export interface components {
         CancelInvitationArgs: {
             email: string;
         };
-        ChangePrimaryIdentityRequest: {
-            newPrimaryProvider: string;
-            newPrimaryUserId: string;
-        };
         ChangeSubscriptionPlanArgs: {
             newPlanId: string;
+        };
+        CheckOauthAppArgs: {
+            clientId: string;
+            redirectUri: string;
         };
         /** Format: int64 */
         CloudBackupId: number;
@@ -1622,12 +1704,11 @@ export interface components {
         };
         CreateProjectArgs: {
             deploymentType?: null | components["schemas"]["DeploymentType"];
-            partitionId?: null | components["schemas"]["PartitionId"];
             projectName: components["schemas"]["ProjectName"];
             team: components["schemas"]["TeamSlug"];
         };
         CreateProjectResponse: {
-            adminKey: components["schemas"]["AdminKey"];
+            adminKey?: null | components["schemas"]["AdminKey"];
             deploymentName: string;
             prodUrl: string;
             projectId: components["schemas"]["ProjectId"];
@@ -1665,7 +1746,7 @@ export interface components {
         DeploymentResponse: {
             /** Format: int64 */
             createTime: number;
-            creator: components["schemas"]["MemberId"];
+            creator?: null | components["schemas"]["MemberId"];
             deploymentType: components["schemas"]["DeploymentType"];
             /** Format: int64 */
             id: number;
@@ -1757,6 +1838,11 @@ export interface components {
             /** Format: int64 */
             tokensUsed: number;
         };
+        IdentityResponse: {
+            email?: string | null;
+            id: string;
+            providers: string[];
+        };
         InstanceAuthForDashboardInteractionsResponse: {
             adminKey: components["schemas"]["SerializedAccessToken"];
             instanceUrl: string;
@@ -1794,9 +1880,6 @@ export interface components {
         InvoicesResponse: {
             invoices: components["schemas"]["InvoiceResponse"][];
         };
-        LinkIdentityRequest: {
-            fromProfile: boolean;
-        };
         ListEnvVariableResponse: {
             configs: components["schemas"]["EnvVariableConfigJson"][];
         };
@@ -1826,6 +1909,19 @@ export interface components {
             id: components["schemas"]["MemberId"];
             name?: string | null;
         };
+        OauthAppMetadata: {
+            clientId: string;
+            clientSecret: string;
+        };
+        OauthAppResponse: {
+            appName: components["schemas"]["AppName"];
+            clientId: string;
+            clientSecret?: string | null;
+            /** Format: int64 */
+            createTime: number;
+            redirectUris: string[];
+            verified: boolean;
+        };
         OptIn: {
             tos: string;
         };
@@ -1843,8 +1939,6 @@ export interface components {
             plan: components["schemas"]["PlanResponse"];
             status: string;
         };
-        /** Format: int64 */
-        PartitionId: number;
         PaymentMethodResponse: {
             display: string;
             kind: string;
@@ -1870,14 +1964,6 @@ export interface components {
             plans: components["schemas"]["PlanResponse"][];
         };
         PreviewDeploymentIdentifier: string;
-        ProfileData: {
-            email?: string | null;
-            name?: string | null;
-            nickname?: string | null;
-            username?: string | null;
-            vercel_account_id?: string | null;
-            vercel_installation_id?: string | null;
-        };
         ProfileEmailArgs: {
             email: string;
         };
@@ -1925,11 +2011,15 @@ export interface components {
             referrals: components["schemas"]["TeamName"][];
             referredBy?: null | components["schemas"]["TeamName"];
         };
+        RegisterOauthAppArgs: {
+            appName: components["schemas"]["AppName"];
+            redirectUris: string[];
+        };
         RemoveMemberArgs: {
             memberId: components["schemas"]["MemberId"];
         };
         RenameAccessTokenArgs: {
-            /** @description Authentication token is expected to be the access token from auth0 */
+            /** @description Authentication token is expected to be the access token from WorkOS */
             accessToken: string;
             newName: components["schemas"]["DeviceName"];
         };
@@ -1943,7 +2033,7 @@ export interface components {
         /** @description ConvexAccessToken is our own internal notion of authorization.
          *     It is versioned.
          *
-         *     V1 - uses an auth0_access_token for authorization.
+         *     V1 - uses an WorkOS access token for authorization.
          *
          *     Serialization is done by SerializedAccessToken::new
          *     The ConvexAccessToken is serialized (json) and base64
@@ -1957,7 +2047,7 @@ export interface components {
          *     left public.
          *
          *     The json is externally tagged. Expect it to look like
-         *     {"v1": "auth0token"} */
+         *     {"v1": "workostoken"} */
         SerializedAccessToken: string;
         SetSpendingLimitArgs: {
             /** Format: int64 */
@@ -2049,7 +2139,6 @@ export interface components {
             discordId: components["schemas"]["DiscordId"];
         };
         UnlinkIdentityRequest: {
-            provider: string;
             userId: string;
         };
         UpdateBillingAddressArgs: {
@@ -2069,6 +2158,10 @@ export interface components {
         UpdateMemberRoleArgs: {
             memberId: components["schemas"]["MemberId"];
             role: components["schemas"]["Role"];
+        };
+        UpdateOauthAppArgs: {
+            appName?: null | components["schemas"]["AppName"];
+            redirectUris?: string[] | null;
         };
         UpdatePaymentMethodArgs: {
             paymentMethod: string;
@@ -2130,7 +2223,7 @@ export type AuditLogAction = components['schemas']['AuditLogAction'];
 export type AuditLogActor = components['schemas']['AuditLogActor'];
 export type AuditLogEventResponse = components['schemas']['AuditLogEventResponse'];
 export type AuditLogResponse = components['schemas']['AuditLogResponse'];
-export type AuthIdentity = components['schemas']['AuthIdentity'];
+export type AuthIdentityResponse = components['schemas']['AuthIdentityResponse'];
 export type AuthorizeAppArgs = components['schemas']['AuthorizeAppArgs'];
 export type AuthorizeAppMode = components['schemas']['AuthorizeAppMode'];
 export type AuthorizeArgs = components['schemas']['AuthorizeArgs'];
@@ -2139,8 +2232,8 @@ export type AuthorizeDiscordAccountRequest = components['schemas']['AuthorizeDis
 export type AuthorizeResponse = components['schemas']['AuthorizeResponse'];
 export type BillingContactResponse = components['schemas']['BillingContactResponse'];
 export type CancelInvitationArgs = components['schemas']['CancelInvitationArgs'];
-export type ChangePrimaryIdentityRequest = components['schemas']['ChangePrimaryIdentityRequest'];
 export type ChangeSubscriptionPlanArgs = components['schemas']['ChangeSubscriptionPlanArgs'];
+export type CheckOauthAppArgs = components['schemas']['CheckOauthAppArgs'];
 export type CloudBackupId = components['schemas']['CloudBackupId'];
 export type CloudBackupResponse = components['schemas']['CloudBackupResponse'];
 export type ConfigurePeriodicBackupArgs = components['schemas']['ConfigurePeriodicBackupArgs'];
@@ -2168,12 +2261,12 @@ export type GetCurrentSpendResponse = components['schemas']['GetCurrentSpendResp
 export type GetOptInsResponse = components['schemas']['GetOptInsResponse'];
 export type GetSpendingLimitsResponse = components['schemas']['GetSpendingLimitsResponse'];
 export type GetTokenInfoResponse = components['schemas']['GetTokenInfoResponse'];
+export type IdentityResponse = components['schemas']['IdentityResponse'];
 export type InstanceAuthForDashboardInteractionsResponse = components['schemas']['InstanceAuthForDashboardInteractionsResponse'];
 export type InstanceName = components['schemas']['InstanceName'];
 export type InvitationResponse = components['schemas']['InvitationResponse'];
 export type InvoiceResponse = components['schemas']['InvoiceResponse'];
 export type InvoicesResponse = components['schemas']['InvoicesResponse'];
-export type LinkIdentityRequest = components['schemas']['LinkIdentityRequest'];
 export type ListEnvVariableResponse = components['schemas']['ListEnvVariableResponse'];
 export type ListVanityDomainsResponse = components['schemas']['ListVanityDomainsResponse'];
 export type MemberDataResponse = components['schemas']['MemberDataResponse'];
@@ -2181,16 +2274,16 @@ export type MemberEmailId = components['schemas']['MemberEmailId'];
 export type MemberEmailResponse = components['schemas']['MemberEmailResponse'];
 export type MemberId = components['schemas']['MemberId'];
 export type MemberResponse = components['schemas']['MemberResponse'];
+export type OauthAppMetadata = components['schemas']['OauthAppMetadata'];
+export type OauthAppResponse = components['schemas']['OauthAppResponse'];
 export type OptIn = components['schemas']['OptIn'];
 export type OptInToAccept = components['schemas']['OptInToAccept'];
 export type OrbSubscriptionResponse = components['schemas']['OrbSubscriptionResponse'];
-export type PartitionId = components['schemas']['PartitionId'];
 export type PaymentMethodResponse = components['schemas']['PaymentMethodResponse'];
 export type PeriodicBackupConfig = components['schemas']['PeriodicBackupConfig'];
 export type PlanResponse = components['schemas']['PlanResponse'];
 export type PlansResponse = components['schemas']['PlansResponse'];
 export type PreviewDeploymentIdentifier = components['schemas']['PreviewDeploymentIdentifier'];
-export type ProfileData = components['schemas']['ProfileData'];
 export type ProfileEmailArgs = components['schemas']['ProfileEmailArgs'];
 export type ProjectDetails = components['schemas']['ProjectDetails'];
 export type ProjectId = components['schemas']['ProjectId'];
@@ -2205,6 +2298,7 @@ export type ProvisionDeploymentDashboardResponse = components['schemas']['Provis
 export type RecordTokensArgs = components['schemas']['RecordTokensArgs'];
 export type ReferralCode = components['schemas']['ReferralCode'];
 export type ReferralState = components['schemas']['ReferralState'];
+export type RegisterOauthAppArgs = components['schemas']['RegisterOauthAppArgs'];
 export type RemoveMemberArgs = components['schemas']['RemoveMemberArgs'];
 export type RenameAccessTokenArgs = components['schemas']['RenameAccessTokenArgs'];
 export type RequestDestination = components['schemas']['RequestDestination'];
@@ -2231,6 +2325,7 @@ export type UpdateBillingContactArgs = components['schemas']['UpdateBillingConta
 export type UpdateEnvironmentVariable = components['schemas']['UpdateEnvironmentVariable'];
 export type UpdateEnvironmentVariables = components['schemas']['UpdateEnvironmentVariables'];
 export type UpdateMemberRoleArgs = components['schemas']['UpdateMemberRoleArgs'];
+export type UpdateOauthAppArgs = components['schemas']['UpdateOauthAppArgs'];
 export type UpdatePaymentMethodArgs = components['schemas']['UpdatePaymentMethodArgs'];
 export type UpdateProfileNameArgs = components['schemas']['UpdateProfileNameArgs'];
 export type UpdateProjectArgs = components['schemas']['UpdateProjectArgs'];
@@ -2243,7 +2338,26 @@ export type VanityDomainRequestArgs = components['schemas']['VanityDomainRequest
 export type VanityDomainResponse = components['schemas']['VanityDomainResponse'];
 export type $defs = Record<string, never>;
 export interface operations {
-    authorize_device: {
+    list_profile_emails: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberEmailResponse"][];
+                };
+            };
+        };
+    };
+    create_profile_email: {
         parameters: {
             query?: never;
             header?: never;
@@ -2252,95 +2366,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AuthorizeArgs"];
+                "application/json": components["schemas"]["ProfileEmailArgs"];
             };
         };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuthorizeResponse"];
-                };
-            };
-        };
-    };
-    authorize_app: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AuthorizeAppArgs"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuthorizeCodeResponse"];
-                };
-            };
-        };
-    };
-    get_cloud_backup: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                cloud_backup_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CloudBackupResponse"];
-                };
-            };
-        };
-    };
-    cancel_cloud_backup: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                cloud_backup_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    delete_cloud_backup: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                cloud_backup_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
         responses: {
             200: {
                 headers: {
@@ -2350,7 +2378,7 @@ export interface operations {
             };
         };
     };
-    create_project_and_provision_deployment: {
+    delete_profile_email: {
         parameters: {
             query?: never;
             header?: never;
@@ -2359,7 +2387,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateProjectArgs"];
+                "application/json": components["schemas"]["ProfileEmailArgs"];
             };
         };
         responses: {
@@ -2367,13 +2395,49 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
+                content?: never;
+            };
+        };
+    };
+    get_member_data: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
                 content: {
-                    "application/json": components["schemas"]["CreateProjectResponse"];
+                    "application/json": components["schemas"]["MemberDataResponse"];
                 };
             };
         };
     };
-    delete_access_token: {
+    get_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberResponse"];
+                };
+            };
+        };
+    };
+    resend_verification_email: {
         parameters: {
             query?: never;
             header?: never;
@@ -2382,9 +2446,70 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["DeleteAccessTokenArgs"];
+                "application/json": components["schemas"]["ProfileEmailArgs"];
             };
         };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_primary_profile_email: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileEmailArgs"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_profile_name: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProfileNameArgs"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    verify_profile_email: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             200: {
                 headers: {
@@ -2408,6 +2533,414 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    dashboard_get_opt_ins: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetOptInsResponse"];
+                };
+            };
+        };
+    };
+    dashboard_accept_opt_ins: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OptIn"][];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_teams_for_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"][];
+                };
+            };
+        };
+    };
+    create_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTeamArgs"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+        };
+    };
+    get_members_for_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamMemberResponse"][];
+                };
+            };
+        };
+    };
+    remove_member_from_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoveMemberArgs"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_team_entitlements: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamEntitlementsResponse"];
+                };
+            };
+        };
+    };
+    update_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTeamArgs"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    apply_referral_code: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplyReferralCodeArgs"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    validate_referral_code: {
+        parameters: {
+            query: {
+                code: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidateReferralCodeResult"];
+                };
+            };
+        };
+    };
+    get_referral_state_for_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferralState"];
+                };
+            };
+        };
+    };
+    get_projects_for_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetails"][];
+                };
+            };
+        };
+    };
+    get_team_usage_state: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamUsageStateResponse"];
+                };
+            };
+        };
+    };
+    unpause_deployments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_audit_log_events: {
+        parameters: {
+            query: {
+                from: number;
+                to: number;
+                memberId?: components["schemas"]["MemberId"];
+                action?: components["schemas"]["AuditLogAction"];
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditLogResponse"];
+                };
+            };
+        };
+    };
+    get_project: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetails"];
+                };
+            };
+        };
+    };
+    update_project: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProjectArgs"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_deployments_for_project: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentResponse"][];
+                };
             };
         };
     };
@@ -2451,18 +2984,16 @@ export interface operations {
             };
         };
     };
-    configure_periodic_backup: {
+    create_project_and_provision_deployment: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                deployment_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ConfigurePeriodicBackupArgs"];
+                "application/json": components["schemas"]["CreateProjectArgs"];
             };
         };
         responses: {
@@ -2471,21 +3002,117 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": null | components["schemas"]["PeriodicBackupConfig"];
+                    "application/json": components["schemas"]["CreateProjectResponse"];
                 };
             };
         };
     };
-    disable_periodic_backup: {
+    transfer_project: {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferProjectArgs"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_deployment_auth_dashboard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deployment_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceAuthForDashboardInteractionsResponse"];
+                };
+            };
+        };
+    };
+    provision_deployment_dashboard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProvisionDeploymentDashboardArgs"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProvisionDeploymentDashboardResponse"];
+                };
+            };
+        };
+    };
+    get_deployment_by_id: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: components["schemas"]["TeamId"];
+                /** @description Can be a deployment's id (integer) or name (string) */
                 deployment_id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentResponse"];
+                };
+            };
+        };
+    };
+    update_member_role: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMemberRoleArgs"];
+            };
+        };
         responses: {
             200: {
                 headers: {
@@ -2495,12 +3122,12 @@ export interface operations {
             };
         };
     };
-    get_periodic_backup_config: {
+    get_project_roles_for_team: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                deployment_id: string;
+                team_id: string;
             };
             cookie?: never;
         };
@@ -2511,8 +3138,31 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": null | components["schemas"]["PeriodicBackupConfig"];
+                    "application/json": components["schemas"]["ProjectMemberRoleResponse"][];
                 };
+            };
+        };
+    };
+    update_project_roles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProjectRolesArgs"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -2560,6 +3210,153 @@ export interface operations {
             };
         };
     };
+    list_cloud_backups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudBackupResponse"][];
+                };
+            };
+        };
+    };
+    delete_cloud_backup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cloud_backup_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_cloud_backup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cloud_backup_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudBackupResponse"];
+                };
+            };
+        };
+    };
+    cancel_cloud_backup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cloud_backup_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_periodic_backup_config: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deployment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": null | components["schemas"]["PeriodicBackupConfig"];
+                };
+            };
+        };
+    };
+    configure_periodic_backup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deployment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigurePeriodicBackupArgs"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": null | components["schemas"]["PeriodicBackupConfig"];
+                };
+            };
+        };
+    };
+    disable_periodic_backup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deployment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     get_discord_accounts: {
         parameters: {
             query?: never;
@@ -2575,6 +3372,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DiscordAccountsResponse"];
+                };
+            };
+        };
+    };
+    get_discord_login_url: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordLoginUrlResponse"];
                 };
             };
         };
@@ -2600,25 +3416,6 @@ export interface operations {
             };
         };
     };
-    get_discord_login_url: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DiscordLoginUrlResponse"];
-                };
-            };
-        };
-    };
     unlink_discord_account: {
         parameters: {
             query?: never;
@@ -2637,48 +3434,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-        };
-    };
-    get_deployment_access_tokens: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                deployment_name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TeamAccessTokenResponse"][];
-                };
-            };
-        };
-    };
-    get_deployment_auth_dashboard: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                deployment_name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InstanceAuthForDashboardInteractionsResponse"];
-                };
             };
         };
     };
@@ -2749,12 +3504,54 @@ export interface operations {
             };
         };
     };
-    accept_invitation: {
+    rename_access_token: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameAccessTokenArgs"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_access_token: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteAccessTokenArgs"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_team_access_tokens: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                code: string;
+                team_id: string;
             };
             cookie?: never;
         };
@@ -2765,250 +3562,17 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Team"];
+                    "application/json": components["schemas"]["TeamAccessTokenResponse"][];
                 };
             };
         };
     };
-    link_identity: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LinkIdentityRequest"];
-            };
-        };
-        responses: never;
-    };
-    list_identities: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuthIdentity"][];
-                };
-            };
-        };
-    };
-    get_member_data: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MemberDataResponse"];
-                };
-            };
-        };
-    };
-    dashboard_get_opt_ins: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GetOptInsResponse"];
-                };
-            };
-        };
-    };
-    dashboard_accept_opt_ins: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OptIn"][];
-            };
-        };
-        responses: {
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_profile: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MemberResponse"];
-                };
-            };
-        };
-    };
-    create_profile_email: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ProfileEmailArgs"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    delete_profile_email: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ProfileEmailArgs"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    list_profile_emails: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MemberEmailResponse"][];
-                };
-            };
-        };
-    };
-    resend_verification_email: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ProfileEmailArgs"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    update_primary_profile_email: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ProfileEmailArgs"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    verify_profile_email: {
+    get_team_app_access_tokens: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                code: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_project: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
+                team_id: string;
             };
             cookie?: never;
         };
@@ -3019,31 +3583,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectDetails"];
+                    "application/json": components["schemas"]["AppAccessTokenResponse"][];
                 };
             };
         };
     };
-    update_project: {
+    get_deployment_access_tokens: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                project_id: string;
+                deployment_name: string;
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateProjectArgs"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["TeamAccessTokenResponse"][];
+                };
             };
         };
     };
@@ -3089,236 +3651,6 @@ export interface operations {
             };
         };
     };
-    deactivate_preview_deployment: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DeactivatePreviewDeploymentArgs"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    list_environment_variables: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListEnvVariableResponse"];
-                };
-            };
-        };
-    };
-    update_environment_variables: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateEnvironmentVariables"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    list_deployments_for_project: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DeploymentResponse"][];
-                };
-            };
-        };
-    };
-    list_preview_deployments_for_project: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DeploymentResponse"][];
-                };
-            };
-        };
-    };
-    provision_deployment_dashboard: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ProvisionDeploymentDashboardArgs"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProvisionDeploymentDashboardResponse"];
-                };
-            };
-        };
-    };
-    transfer_project: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TransferProjectArgs"];
-            };
-        };
-        responses: {
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    rename_access_token: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RenameAccessTokenArgs"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    set_jwt_cookie: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: never;
-    };
-    get_teams_for_member: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Team"][];
-                };
-            };
-        };
-    };
-    create_team: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateTeamArgs"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Team"];
-                };
-            };
-        };
-    };
     delete_team_access_token: {
         parameters: {
             query?: never;
@@ -3340,353 +3672,48 @@ export interface operations {
             };
         };
     };
-    update_team: {
+    authorize_device: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                team_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UpdateTeamArgs"];
+                "application/json": components["schemas"]["AuthorizeArgs"];
             };
         };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_team_access_tokens: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
         responses: {
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TeamAccessTokenResponse"][];
+                    "application/json": components["schemas"]["AuthorizeResponse"];
                 };
             };
         };
     };
-    apply_referral_code: {
+    authorize_app: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                team_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ApplyReferralCodeArgs"];
+                "application/json": components["schemas"]["AuthorizeAppArgs"];
             };
         };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    cancel_orb_subscription: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    change_subscription_plan: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ChangeSubscriptionPlanArgs"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    create_setup_intent: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
         responses: {
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SetupIntentResponse"];
-                };
-            };
-        };
-    };
-    create_subscription: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateSubscriptionArgs"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    delete_team: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_deployment_by_id: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: components["schemas"]["TeamId"];
-                /** @description Can be a deployment's id (integer) or name (string) */
-                deployment_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DeploymentResponse"];
-                };
-            };
-        };
-    };
-    get_audit_log_events: {
-        parameters: {
-            query: {
-                from: number;
-                to: number;
-                memberId?: components["schemas"]["MemberId"];
-                action?: components["schemas"]["AuditLogAction"];
-                limit?: number;
-                cursor?: string;
-            };
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuditLogResponse"];
-                };
-            };
-        };
-    };
-    get_current_spend: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GetCurrentSpendResponse"];
-                };
-            };
-        };
-    };
-    get_discounted_plan: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-                plan_id: string;
-                promo_code: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DiscountedPlanResponse"];
-                };
-            };
-        };
-    };
-    get_team_entitlements: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TeamEntitlementsResponse"];
-                };
-            };
-        };
-    };
-    get_orb_subscription: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": null | components["schemas"]["OrbSubscriptionResponse"];
-                };
-            };
-        };
-    };
-    get_project_roles_for_team: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectMemberRoleResponse"][];
-                };
-            };
-        };
-    };
-    get_spending_limits: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GetSpendingLimitsResponse"];
+                    "application/json": components["schemas"]["AuthorizeCodeResponse"];
                 };
             };
         };
@@ -3758,6 +3785,136 @@ export interface operations {
             };
         };
     };
+    accept_invitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+        };
+    };
+    cancel_orb_subscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    change_subscription_plan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeSubscriptionPlanArgs"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    create_subscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSubscriptionArgs"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_discounted_plan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+                plan_id: string;
+                promo_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscountedPlanResponse"];
+                };
+            };
+        };
+    };
+    get_orb_subscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": null | components["schemas"]["OrbSubscriptionResponse"];
+                };
+            };
+        };
+    };
     list_active_plans: {
         parameters: {
             query?: never;
@@ -3775,27 +3932,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlansResponse"];
-                };
-            };
-        };
-    };
-    list_cloud_backups: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CloudBackupResponse"][];
                 };
             };
         };
@@ -3818,134 +3954,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["InvoicesResponse"];
                 };
-            };
-        };
-    };
-    get_members_for_team: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TeamMemberResponse"][];
-                };
-            };
-        };
-    };
-    get_projects_for_team: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectDetails"][];
-                };
-            };
-        };
-    };
-    get_referral_state_for_team: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReferralState"];
-                };
-            };
-        };
-    };
-    remove_member_from_team: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RemoveMemberArgs"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    set_spending_limit: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SetSpendingLimitArgs"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    unpause_deployments: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
@@ -4014,29 +4022,6 @@ export interface operations {
             };
         };
     };
-    update_member_role: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateMemberRoleArgs"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     update_payment_method: {
         parameters: {
             query?: never;
@@ -4060,30 +4045,7 @@ export interface operations {
             };
         };
     };
-    update_project_roles: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateProjectRolesArgs"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_team_current_billing_period: {
+    create_setup_intent: {
         parameters: {
             query?: never;
             header?: never;
@@ -4099,8 +4061,161 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TeamCurrentBillingPeriodResponse"];
+                    "application/json": components["schemas"]["SetupIntentResponse"];
                 };
+            };
+        };
+    };
+    set_spending_limit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetSpendingLimitArgs"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_current_spend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetCurrentSpendResponse"];
+                };
+            };
+        };
+    };
+    get_spending_limits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetSpendingLimitsResponse"];
+                };
+            };
+        };
+    };
+    list_preview_deployments_for_project: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentResponse"][];
+                };
+            };
+        };
+    };
+    deactivate_preview_deployment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeactivatePreviewDeploymentArgs"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_environment_variables: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListEnvVariableResponse"];
+                };
+            };
+        };
+    };
+    update_environment_variables: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateEnvironmentVariables"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -4135,7 +4250,7 @@ export interface operations {
             };
         };
     };
-    get_team_usage_state: {
+    get_team_current_billing_period: {
         parameters: {
             query?: never;
             header?: never;
@@ -4151,7 +4266,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TeamUsageStateResponse"];
+                    "application/json": components["schemas"]["TeamCurrentBillingPeriodResponse"];
                 };
             };
         };
@@ -4219,46 +4334,9 @@ export interface operations {
         };
         responses: never;
     };
-    update_primary_identity: {
+    list_identities: {
         parameters: {
             query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ChangePrimaryIdentityRequest"];
-            };
-        };
-        responses: never;
-    };
-    update_profile_name: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateProfileNameArgs"];
-            };
-        };
-        responses: {
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    validate_referral_code: {
-        parameters: {
-            query: {
-                code: string;
-            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -4270,8 +4348,167 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ValidateReferralCodeResult"];
+                    "application/json": components["schemas"]["AuthIdentityResponse"][];
                 };
+            };
+        };
+    };
+    identities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityResponse"][];
+                };
+            };
+        };
+    };
+    list_oauth_apps_for_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OauthAppResponse"][];
+                };
+            };
+        };
+    };
+    check_oauth_app: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckOauthAppArgs"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OauthAppResponse"];
+                };
+            };
+        };
+    };
+    register_oauth_app: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterOauthAppArgs"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OauthAppResponse"];
+                };
+            };
+        };
+    };
+    update_oauth_app: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: components["schemas"]["TeamId"];
+                /** @description The client ID of the OAuth app to update */
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOauthAppArgs"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OauthAppResponse"];
+                };
+            };
+        };
+    };
+    delete_oauth_app: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: components["schemas"]["TeamId"];
+                /** @description The client ID of the OAuth app to delete */
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    regenerate_oauth_client_secret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: components["schemas"]["TeamId"];
+                /** @description The client ID of the OAuth app to regenerate the secret for */
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

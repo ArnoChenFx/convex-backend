@@ -77,8 +77,8 @@ use vector::{
 
 use crate::{
     committer::CommitterClient,
-    index_workers::fast_forward::load_metadata_fast_forward_ts,
     metrics::log_document_skipped,
+    search_index_workers::fast_forward::load_metadata_fast_forward_ts,
 };
 
 pub const FINISHED_BOOTSTRAP_UPDATES: &str = "finished_bootstrap_updates";
@@ -125,12 +125,15 @@ impl IndexesToBootstrap {
             match index_metadata.config {
                 IndexConfig::Vector {
                     on_disk_state,
-                    ref developer_config,
+                    ref spec,
                     ..
                 } => {
-                    let qdrant_schema = QdrantSchema::new(developer_config);
+                    let qdrant_schema = QdrantSchema::new(spec);
                     let ts = match on_disk_state {
-                        VectorIndexState::Backfilled(ref snapshot_info)
+                        VectorIndexState::Backfilled {
+                            snapshot: ref snapshot_info,
+                            ..
+                        }
                         | VectorIndexState::SnapshottedAt(ref snapshot_info) => {
                             // Use fast forward ts instead of snapshot ts.
                             let current_index_ts =
@@ -158,7 +161,7 @@ impl IndexesToBootstrap {
                     }
                 },
                 IndexConfig::Text {
-                    ref developer_config,
+                    ref spec,
                     on_disk_state,
                 } => {
                     let text_index = match on_disk_state {
@@ -174,11 +177,15 @@ impl IndexesToBootstrap {
                             ));
                             TextIndex::Backfilling { memory_index }
                         },
-                        TextIndexState::Backfilled(TextIndexSnapshot {
-                            data,
-                            ts: disk_ts,
-                            version,
-                        })
+                        TextIndexState::Backfilled {
+                            snapshot:
+                                TextIndexSnapshot {
+                                    data,
+                                    ts: disk_ts,
+                                    version,
+                                },
+                            staged: _,
+                        }
                         | TextIndexState::SnapshottedAt(TextIndexSnapshot {
                             data,
                             ts: disk_ts,
@@ -202,7 +209,7 @@ impl IndexesToBootstrap {
                             }
                         },
                     };
-                    let tantivy_schema = TantivySearchIndexSchema::new(developer_config);
+                    let tantivy_schema = TantivySearchIndexSchema::new(spec);
                     let text_index_bootstrap_data = TextIndexBootstrapData {
                         index_id: index_id.internal_id(),
                         text_index,
@@ -597,7 +604,7 @@ mod tests {
 
     use crate::{
         bootstrap_model::index_workers::IndexWorkerMetadataModel,
-        index_workers::fast_forward::load_metadata_fast_forward_ts,
+        search_index_workers::fast_forward::load_metadata_fast_forward_ts,
         test_helpers::{
             index_utils::assert_enabled,
             DbFixtures,
@@ -855,7 +862,7 @@ mod tests {
             .pending_index_metadata(TableNamespace::test_user(), &index_metadata.name)?
             .expect("Missing index metadata!");
         IndexModel::new(&mut tx)
-            .enable_backfilled_indexes(vec![resolved_index.clone().into_value()])
+            .enable_backfilled_indexes(vec![resolved_index.clone()])
             .await?;
         db.commit(tx).await?;
         assert_enabled(
@@ -1056,7 +1063,7 @@ mod tests {
         };
         must_let!(
             let IndexConfig::Text {
-                on_disk_state: TextIndexState::Backfilled(disk_snapshot), ..
+                on_disk_state: TextIndexState::Backfilled { snapshot: disk_snapshot, .. }, ..
             } = index_doc.into_value().config
         );
 
@@ -1180,7 +1187,7 @@ mod tests {
             .await?;
         db.commit(tx).await?;
 
-        let mut flusher = new_text_flusher_for_tests(
+        let flusher = new_text_flusher_for_tests(
             rt.clone(),
             db.clone(),
             tp.reader(),

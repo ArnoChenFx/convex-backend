@@ -50,9 +50,12 @@ import {
   PanelGroup,
 } from "react-resizable-panels";
 import { cn } from "@ui/cn";
-import { useTableIndexes } from "@common/features/data/lib/api";
+
 import { getDefaultIndex } from "@common/features/data/components/DataFilters/IndexFilters";
 import { useMount } from "react-use";
+import { api } from "system-udfs/convex/_generated/api";
+import { useNents } from "@common/lib/useNents";
+import omit from "lodash/omit";
 
 export function DataContent({
   tableName,
@@ -65,7 +68,7 @@ export function DataContent({
   shape: Shape | null;
   activeSchema: SchemaJson | null;
 }) {
-  const { filters, changeFilters, hasFilters } = useTableFilters(
+  const { filters, applyFiltersWithHistory, hasFilters } = useTableFilters(
     tableName,
     componentId,
   );
@@ -176,10 +179,30 @@ export function DataContent({
   });
   const { popupEl } = popupState;
 
+  // Handle query parameter to open the indexes panel
+  useEffect(() => {
+    if (!!router.query.showIndexes && !popupState.popup) {
+      popupState.setPopup({ type: "viewIndexes", tableName });
+      void router.push(
+        {
+          pathname: router.pathname,
+          query: omit(router.query, "showIndexes"),
+        },
+        undefined,
+        { shallow: true },
+      );
+    }
+  }, [router.query.showIndexes, router, popupState, tableName]);
+
   const selectedDocumentId = rowsThatAreSelected.values().next().value;
   const selectedDocument = data.find((row) => row._id === selectedDocumentId);
   const defaultDocument = useDefaultDocument(tableName);
-  const { indexes } = useTableIndexes(tableName);
+  const { selectedNent } = useNents();
+  const indexes =
+    useQuery(api._system.frontend.indexes.default, {
+      tableName,
+      tableNamespace: selectedNent?.id ?? null,
+    }) ?? undefined;
   const sortField =
     (
       indexes?.find((index) => index.name === filters?.index?.name)?.fields as
@@ -191,7 +214,7 @@ export function DataContent({
     <PanelGroup
       direction="horizontal"
       className={cn(
-        "flex w-full h-full overflow-x-auto scrollbar pl-6 min-w-[20rem]",
+        "scrollbar flex h-full w-full min-w-[20rem] overflow-x-auto pl-6",
         popupEl ? "pr-0" : "pr-6",
       )}
       autoSaveId="data-content"
@@ -219,7 +242,7 @@ export function DataContent({
           isLoadingMore={isLoading && !isPaused}
         />
 
-        <div className="flex h-full max-h-full flex-col overflow-y-hidden rounded-sm">
+        <div className="flex h-full max-h-full flex-col overflow-y-hidden rounded-lg">
           {numRowsInTable !== undefined && numRowsInTable > 0 && (
             <DataFilters
               tableName={tableName}
@@ -227,7 +250,7 @@ export function DataContent({
               tableFields={tableFields}
               defaultDocument={defaultDocument}
               filters={filters}
-              onChangeFilters={changeFilters}
+              onFiltersChange={applyFiltersWithHistory}
               dataFetchErrors={errors}
               draftFilters={draftFilters}
               setDraftFilters={setDraftFilters}
@@ -242,7 +265,7 @@ export function DataContent({
 
           <LoadingTransition
             loadingState={
-              <div className="flex h-full flex-col items-center justify-center gap-8 rounded-sm border bg-background-secondary">
+              <div className="flex h-full flex-col items-center justify-center gap-8 rounded-lg border bg-background-secondary">
                 <LoadingLogo />
               </div>
             }
@@ -327,7 +350,7 @@ export function DataContent({
                     </div>
                     <Button
                       onClick={() =>
-                        changeFilters({
+                        applyFiltersWithHistory({
                           clauses: [],
                           index: {
                             name: filters?.index?.name || "_creationTime",

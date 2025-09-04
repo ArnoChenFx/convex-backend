@@ -26,6 +26,7 @@ use std::{
 
 use ::metrics::StaticMetricLabel;
 use anyhow::Context as _;
+use bytes::Bytes;
 use cmd_util::env::env_config;
 use common::{
     errors::report_error_sync,
@@ -78,6 +79,7 @@ use tokio_postgres::{
         ToSql,
     },
     AsyncMessage,
+    CopyInSink,
     Row,
     RowStream,
     Statement,
@@ -85,15 +87,18 @@ use tokio_postgres::{
 };
 use tokio_postgres_rustls::MakeRustlsConnect;
 
-use crate::metrics::{
-    connection_lifetime_timer,
-    get_connection_timer,
-    log_execute,
-    log_poisoned_connection,
-    log_query,
-    log_query_result,
-    log_transaction,
-    new_connection_pool_stats,
+use crate::{
+    metrics::{
+        connection_lifetime_timer,
+        get_connection_timer,
+        log_execute,
+        log_poisoned_connection,
+        log_query,
+        log_query_result,
+        log_transaction,
+        new_connection_pool_stats,
+    },
+    PgInstanceName,
 };
 
 static POSTGRES_TIMEOUT: LazyLock<u64> =
@@ -195,6 +200,7 @@ pub(crate) struct PostgresConnection<'a> {
     conn: Option<PooledConnection>,
     poisoned: AtomicBool,
     schema: &'a SchemaName,
+    instance_name: &'a PgInstanceName,
     labels: Vec<StaticMetricLabel>,
     _tracker: ConnectionTracker,
     _timer: Timer<VMHistogramVec>,
@@ -216,7 +222,9 @@ pub(crate) type QueryStream = impl Stream<Item = anyhow::Result<Row>>;
 
 impl PostgresConnection<'_> {
     fn substitute_db_name(&self, query: &'static str) -> String {
-        query.replace("@db_name", &self.schema.escaped)
+        query
+            .replace("@db_name", &self.schema.escaped)
+            .replace("@instance_name", &self.instance_name.escaped)
     }
 
     fn conn(&self) -> &PooledConnection {
@@ -263,6 +271,16 @@ impl PostgresConnection<'_> {
             .map_err(|e| handle_error(&self.poisoned, e))
     }
 
+    pub async fn batch_execute_no_timeout(&self, query: &'static str) -> anyhow::Result<()> {
+        log_execute(self.labels.clone());
+        let query = self.substitute_db_name(query);
+        self.conn()
+            .client
+            .batch_execute(&query)
+            .await
+            .map_err(|e| handle_error(&self.poisoned, e))
+    }
+
     pub async fn query_opt(
         &self,
         statement: &'static str,
@@ -291,6 +309,7 @@ impl PostgresConnection<'_> {
         .map_err(|e| handle_error(&self.poisoned, e))
     }
 
+    #[define_opaque(QueryStream)]
     pub async fn query_raw<P, I>(
         &self,
         statement: &Statement,
@@ -348,7 +367,15 @@ impl PostgresConnection<'_> {
             statement_cache: &conn.statement_cache,
             poisoned: &self.poisoned,
             schema: self.schema,
+            instance_name: self.instance_name,
         })
+    }
+
+    pub async fn copy_in(&self, query: &Statement) -> anyhow::Result<CopyInSink<Bytes>> {
+        let conn = self.conn();
+        with_timeout(conn.client.copy_in(query))
+            .await
+            .map_err(|e| handle_error(&self.poisoned, e))
     }
 }
 
@@ -375,12 +402,15 @@ pub struct PostgresTransaction<'a> {
     inner: Transaction<'a>,
     statement_cache: &'a Mutex<StatementCache>,
     schema: &'a SchemaName,
+    instance_name: &'a PgInstanceName,
     poisoned: &'a AtomicBool,
 }
 
 impl PostgresTransaction<'_> {
     fn substitute_db_name(&self, query: &'static str) -> String {
-        query.replace("@db_name", &self.schema.escaped)
+        query
+            .replace("@db_name", &self.schema.escaped)
+            .replace("@instance_name", &self.instance_name.escaped)
     }
 
     pub async fn prepare_cached(&self, query: &'static str) -> anyhow::Result<Statement> {
@@ -530,6 +560,7 @@ impl ConvexPgPool {
         &'a self,
         name: &'static str,
         schema: &'a SchemaName,
+        instance_name: &'a PgInstanceName,
     ) -> anyhow::Result<PostgresConnection<'a>> {
         let pool_get_timer = get_connection_timer();
         let conn = with_timeout(async {
@@ -551,6 +582,7 @@ impl ConvexPgPool {
             conn: Some(conn),
             poisoned: AtomicBool::new(false),
             schema,
+            instance_name,
             labels: vec![StaticMetricLabel::new("name", name)],
             _tracker: ConnectionTracker::new(&self.stats),
             _timer: connection_lifetime_timer(name),

@@ -399,7 +399,7 @@ pub static INDEX_RETENTION_DELAY: LazyLock<Duration> =
 ///
 /// Smaller window means we keep less historical data around.
 pub static DOCUMENT_RETENTION_DELAY: LazyLock<Duration> = LazyLock::new(|| {
-    Duration::from_secs(env_config("DOCUMENT_RETENTION_DELAY", 60 * 60 * 24 * 90))
+    Duration::from_secs(env_config("DOCUMENT_RETENTION_DELAY", 60 * 60 * 24 * 80))
 });
 
 /// When to start rejecting new additions to the search memory index.
@@ -427,6 +427,10 @@ pub static INDEX_BACKFILL_CHUNK_RATE: LazyLock<usize> =
 /// database, vs holding all entries in memory.
 pub static INDEX_BACKFILL_CHUNK_SIZE: LazyLock<usize> =
     LazyLock::new(|| env_config("INDEX_BACKFILL_CHUNK_SIZE", 256));
+
+/// Number of workers to use for index backfill.
+pub static INDEX_BACKFILL_WORKERS: LazyLock<usize> =
+    LazyLock::new(|| env_config("INDEX_BACKFILL_WORKERS", 1));
 
 /// Chunk size of index entries when reading from persistence.
 pub static RETENTION_READ_CHUNK: LazyLock<usize> =
@@ -470,7 +474,21 @@ pub static RETENTION_FAIL_ALL_MULTIPLIER: LazyLock<usize> =
 /// also used to jitter document retention on startup to avoid a thundering
 /// herd.
 pub static DOCUMENT_RETENTION_BATCH_INTERVAL_SECONDS: LazyLock<Duration> = LazyLock::new(|| {
-    Duration::from_secs(env_config("DOCUMENT_RETENTION_BATCH_INTERVAL_SECONDS", 60))
+    Duration::from_secs_f64(env_config(
+        "DOCUMENT_RETENTION_BATCH_INTERVAL_SECONDS",
+        60.0,
+    ))
+});
+
+/// Documents-per-second rate limit for document retention
+/// Note that while this serves as an upper bound, retention speed is mostly
+/// limited by `DOCUMENT_RETENTION_BATCH_INTERVAL_SECONDS`,
+/// `DOCUMENT_RETENTION_DELETE_CHUNK`, and `DOCUMENT_RETENTION_DELETE_PARALLEL`
+pub static DOCUMENT_RETENTION_RATE_LIMIT: LazyLock<NonZeroU32> = LazyLock::new(|| {
+    env_config(
+        "DOCUMENT_RETENTION_RATE_LIMIT",
+        NonZeroU32::new(1024).unwrap(),
+    )
 });
 
 /// Maximum scanned documents within a single run for document retention unless
@@ -499,7 +517,10 @@ pub static SEARCH_INDEX_WORKER_PAGES_PER_SECOND: LazyLock<NonZeroU32> = LazyLock
 /// index's timestamp up-to-date if its table hasn't had any writes. This isn't
 /// perfect since ideally we'd bound the number and total size of log entries
 /// read for bootstrapping, but it's good enough until we have better commit
-/// statistics that aren't reset at restart.
+/// statistics that aren't reset at restart. It's still expensive to walk the
+/// DocumentRevisionStream to build new segments, so this value needs to be low
+/// enough to not block the search index flushers for too long, or else writes
+/// will start failing. This is why we set this value lower for pro users (10m).
 pub static DATABASE_WORKERS_MAX_CHECKPOINT_AGE: LazyLock<Duration> =
     LazyLock::new(|| Duration::from_secs(env_config("DATABASE_WORKERS_MAX_CHECKPOINT_AGE", 3600)));
 
@@ -1092,6 +1113,10 @@ pub static FIREHOSE_TIMEOUT: LazyLock<Duration> =
 pub static INDEX_WORKERS_INITIAL_BACKOFF: LazyLock<Duration> =
     LazyLock::new(|| Duration::from_millis(env_config("INDEX_WORKERS_INITIAL_BACKOFF", 500)));
 
+/// The maximum backoff time for index workers when a failure occurs.
+pub static INDEX_WORKERS_MAX_BACKOFF: LazyLock<Duration> =
+    LazyLock::new(|| Duration::from_millis(env_config("INDEX_WORKERS_MAX_BACKOFF", 30 * 1000)));
+
 /// The maximum backoff time for search index flusher workers when a failure
 /// occurs. This shouldn't be set too high because flushes are required for
 /// write throughput.
@@ -1176,6 +1201,9 @@ pub static DATABASE_WORKERS_MIN_COMMITS: LazyLock<usize> =
 /// [`DATABASE_WORKERS_MAX_CHECKPOINT_AGE`] seconds even if nothing has changed.
 /// However, to prevent all instances from checkpointing at the same time, we'll
 /// add a jitter of up to ±TABLE_SUMMARY_AGE_JITTER_SECONDS.
+///
+/// Note: the configured value is capped at
+/// `DATABASE_WORKERS_MAX_CHECKPOINT_AGE/2`.
 pub static TABLE_SUMMARY_AGE_JITTER_SECONDS: LazyLock<f32> =
     LazyLock::new(|| env_config("TABLE_SUMMARY_AGE_JITTER_SECONDS", 900.0));
 
@@ -1306,6 +1334,21 @@ pub static COMMIT_TRACE_THRESHOLD: LazyLock<Duration> =
 pub static INSTANCE_LOADER_CONCURRENCY: LazyLock<usize> =
     LazyLock::new(|| env_config("INSTANCE_LOADER_CONCURRENCY", 16));
 
+/// Whether or not to use a rate limiter when loading instances
+pub static INSTANCE_LOADER_USE_RATE_LIMITER: LazyLock<bool> =
+    LazyLock::new(|| env_config("INSTANCE_LOADER_USE_RATE_LIMITER", true));
+
+/// The number of instances that can be loaded per second when the rate limiter
+/// is in use. The default value of 4 means that for a Conductor with 5000
+/// instances, we'd take about 20 minutes to load all instances with infinite
+/// concurrency.
+pub static INSTANCE_LOADER_INSTANCES_PER_SECOND: LazyLock<NonZeroU32> = LazyLock::new(|| {
+    env_config(
+        "INSTANCE_LOADER_INSTANCES_PER_SECOND",
+        NonZeroU32::new(4).unwrap(),
+    )
+});
+
 /// The max number of storage files that can be fetched concurrently during
 /// export. Concurrency is also limited by `EXPORT_MAX_INFLIGHT_PREFETCH_BYTES`.
 pub static EXPORT_STORAGE_GET_CONCURRENCY: LazyLock<usize> =
@@ -1358,3 +1401,17 @@ pub static SUBSCRIPTION_INVALIDATION_DELAY_THRESHOLD: LazyLock<usize> =
 /// invalidated to determine the delay before invalidating them.
 pub static SUBSCRIPTION_INVALIDATION_DELAY_MULTIPLIER: LazyLock<u64> =
     LazyLock::new(|| env_config("SUBSCRIPTION_INVALIDATION_DELAY_MULTIPLIER", 5));
+
+/// When processing a single write log entry takes longer than that time, log
+/// extra detail.
+pub static SUBSCRIPTION_PROCESS_LOG_ENTRY_TRACING_THRESHOLD: LazyLock<u64> =
+    LazyLock::new(|| env_config("SUBSCRIPTION_PROCESS_LOG_ENTRY_TRACING_THRESHOLD", 2));
+
+/// When advancing the write log takes longer than this amount, log extra
+/// details.
+pub static SUBSCRIPTION_ADVANCE_LOG_TRACING_THRESHOLD: LazyLock<u64> =
+    LazyLock::new(|| env_config("SUBSCRIPTION_ADVANCE_LOG_TRACING_THRESHOLD", 10));
+
+/// How many concurrent index backfill threads to run concurrently.
+pub static INDEX_BACKFILL_CONCURRENCY: LazyLock<usize> =
+    LazyLock::new(|| env_config("INDEX_BACKFILL_CONCURRENCY", 8));

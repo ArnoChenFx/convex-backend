@@ -19,6 +19,13 @@ import { ExternalLinkIcon } from "@radix-ui/react-icons";
 
 export const PROVISION_PROD_PAGE_NAME = "production";
 
+type FallbackRender = (errorData: {
+  error: Error;
+  componentStack: string;
+  eventId: string;
+  resetError(): void;
+}) => React.ReactElement;
+
 export type DeploymentInfo = (
   | {
       ok: true;
@@ -88,12 +95,14 @@ export type DeploymentInfo = (
     memberId?: number | null;
     name: string;
   }): JSX.Element;
-  ErrorBoundary(props: { children: ReactNode }): JSX.Element;
+  ErrorBoundary(props: {
+    children: ReactNode;
+    fallback?: FallbackRender;
+  }): JSX.Element;
   teamsURI: string;
   projectsURI: string;
   deploymentsURI: string;
   isSelfHosted: boolean;
-  enableIndexFilters: boolean;
 };
 
 export const DeploymentInfoContext = createContext<DeploymentInfo>(
@@ -174,6 +183,8 @@ const useConnectedDeployment = (
       deploymentName === PROVISION_PROD_PAGE_NAME
     )
       return;
+
+    setState(undefined);
 
     let canceled = false;
     let client: ConvexReactClient;
@@ -486,7 +497,7 @@ function DeploymentWithConnectionState({
           setIsDisconnected(false);
           break;
         default: {
-          const _exhaustiveCheck: never = result;
+          result satisfies never;
           throw new Error(`Unknown connection state: ${result}`);
         }
       }

@@ -12,6 +12,7 @@ use common::{
     bootstrap_model::index::{
         database_index::IndexedFields,
         index_metadata_serialize_tablet_id,
+        INDEX_BY_TABLE_ID_VIRTUAL_INDEX_DESCRIPTOR,
         TABLE_ID_FIELD_PATH,
     },
     document::{
@@ -30,7 +31,6 @@ use common::{
         TRANSACTION_MAX_USER_WRITE_SIZE_BYTES,
     },
     types::{
-        IndexDescriptor,
         TabletIndexName,
         WriteTimestamp,
     },
@@ -356,17 +356,17 @@ impl Writes {
             // Pretend it does since evaluating read dependencies do not actually
             // need to read the index. We only care about the name always mapping
             // to the same fields.
-            let table_name_bytes =
+            let tablet_id_bytes =
                 values_to_bytes(&[Some(index_metadata_serialize_tablet_id(&tablet_id)?)]);
             reads.record_indexed_derived(
                 TabletIndexName::new(
                     table_mapping.index_id.tablet_id,
-                    IndexDescriptor::new("by_table_id")?,
+                    INDEX_BY_TABLE_ID_VIRTUAL_INDEX_DESCRIPTOR.clone(),
                 )?,
                 vec![TABLE_ID_FIELD_PATH.clone()].try_into()?,
                 // Note that should really be exact point instead of a prefix,
                 // but our read set interval does not support this.
-                Interval::prefix(BinaryKey::from(table_name_bytes)),
+                Interval::prefix(BinaryKey::from(tablet_id_bytes)),
             );
         };
 

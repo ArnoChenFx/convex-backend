@@ -262,7 +262,10 @@ pub async fn try_join<T: Send + 'static>(
         name,
         fut.in_span(Span::enter_with_local_parent(name)),
     ));
-    handle.await?.map_err(recapture_stacktrace)
+    match handle.await? {
+        Ok(result) => Ok(result),
+        Err(e) => Err(recapture_stacktrace(e).await),
+    }
 }
 
 /// A Runtime can be considered somewhat like an operating system abstraction
@@ -482,6 +485,14 @@ pub fn new_rate_limiter<RT: Runtime>(runtime: RT, quota: Quota) -> RateLimiter<R
     RateLimiter::direct_with_clock(quota, RuntimeClock { runtime })
 }
 
+/// Creates a rate limiter that is *nearly* unlimited, useful for testing.
+pub fn new_unlimited_rate_limiter<RT: Runtime>(runtime: RT) -> RateLimiter<RT> {
+    new_rate_limiter(
+        runtime,
+        Quota::with_period(Duration::from_nanos(1)).unwrap(),
+    )
+}
+
 pub fn new_keyed_rate_limiter<RT: Runtime, K: Hash + Eq + Clone>(
     runtime: RT,
     quota: Quota,
@@ -580,7 +591,9 @@ impl<T: Send> MutexWithTimeout<T> {
         }
     }
 
-    pub async fn acquire_lock_with_timeout(&self) -> anyhow::Result<tokio::sync::MutexGuard<T>> {
+    pub async fn acquire_lock_with_timeout(
+        &self,
+    ) -> anyhow::Result<tokio::sync::MutexGuard<'_, T>> {
         let acquire_lock = async { Ok(self.mutex.lock().await) };
         select_biased! {
             result = acquire_lock.fuse() => result,

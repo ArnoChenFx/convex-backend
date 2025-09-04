@@ -10,10 +10,10 @@ use cmd_util::env::env_config;
 use common::{
     bootstrap_model::index::{
         vector_index::{
-            DeveloperVectorIndexConfig,
             VectorIndexBackfillState,
             VectorIndexSnapshot,
             VectorIndexSnapshotData,
+            VectorIndexSpec,
             VectorIndexState,
         },
         IndexConfig,
@@ -70,6 +70,7 @@ use vector::{
 };
 
 use crate::{
+    search_index_workers::FlusherType,
     test_helpers::{
         vector_utils::{
             random_vector,
@@ -260,7 +261,7 @@ impl<RT: Runtime> Scenario<RT> {
 
     pub async fn get_vector_index_configs(
         &self,
-    ) -> anyhow::Result<Vec<(DeveloperVectorIndexConfig, VectorIndexState)>> {
+    ) -> anyhow::Result<Vec<(VectorIndexSpec, VectorIndexState)>> {
         let mut tx = self.database.begin_system().await?;
         let mut model = IndexModel::new(&mut tx);
         Ok(model
@@ -269,11 +270,11 @@ impl<RT: Runtime> Scenario<RT> {
             .into_iter()
             .filter_map(|idx| {
                 if let IndexConfig::Vector {
-                    developer_config,
+                    spec,
                     on_disk_state,
                 } = idx.config.clone()
                 {
-                    Some((developer_config, on_disk_state))
+                    Some((spec, on_disk_state))
                 } else {
                     None
                 }
@@ -768,7 +769,7 @@ async fn test_index_backfill_is_incremental(rt: TestRuntime) -> anyhow::Result<(
     scenario.add_vector_index(false).await?;
 
     // Create flusher
-    let mut flusher = new_vector_flusher_for_tests(
+    let flusher = new_vector_flusher_for_tests(
         rt.clone(),
         scenario.database.clone(),
         scenario.reader.clone(),
@@ -776,6 +777,7 @@ async fn test_index_backfill_is_incremental(rt: TestRuntime) -> anyhow::Result<(
         *VECTOR_INDEX_SIZE_SOFT_LIMIT,
         *MULTI_SEGMENT_FULL_SCAN_THRESHOLD_KB,
         incremental_index_size,
+        FlusherType::Backfill,
     );
 
     let mut backfill_ts = None;
@@ -800,11 +802,13 @@ async fn test_index_backfill_is_incremental(rt: TestRuntime) -> anyhow::Result<(
             assert_eq!(segments.len(), (i + 1) as usize);
             backfill_ts = backfill_snapshot_ts;
         } else {
-            must_let!(let VectorIndexState::Backfilled(
-                VectorIndexSnapshot {
+            must_let!(let VectorIndexState::Backfilled {
+                snapshot: VectorIndexSnapshot {
                     data,
                     ts,
-                }) = on_disk_state);
+                },
+                ..
+            } = on_disk_state);
             // Verify snapshot timestamp matches backfill timestamp
             assert_eq!(backfill_ts.unwrap(), ts);
             must_let!(let VectorIndexSnapshotData::MultiSegment(segments) = data);
@@ -852,7 +856,7 @@ async fn test_incremental_backfill_with_compaction(rt: TestRuntime) -> anyhow::R
     scenario.add_vector_index(false).await?;
 
     // Create flusher
-    let mut flusher = new_vector_flusher_for_tests(
+    let flusher = new_vector_flusher_for_tests(
         rt.clone(),
         scenario.database.clone(),
         scenario.reader.clone(),
@@ -860,6 +864,7 @@ async fn test_incremental_backfill_with_compaction(rt: TestRuntime) -> anyhow::R
         *VECTOR_INDEX_SIZE_SOFT_LIMIT,
         *MULTI_SEGMENT_FULL_SCAN_THRESHOLD_KB,
         incremental_index_size,
+        FlusherType::Backfill,
     );
 
     for _ in 0..num_parts {
@@ -872,8 +877,10 @@ async fn test_incremental_backfill_with_compaction(rt: TestRuntime) -> anyhow::R
     let mut vec_indexes = scenario.get_vector_index_configs().await?;
     assert_eq!(vec_indexes.len(), 1);
     let (_, on_disk_state) = vec_indexes.remove(0);
-    must_let!(let VectorIndexState::Backfilled(VectorIndexSnapshot
-        { data: VectorIndexSnapshotData::MultiSegment(segments), .. }) = on_disk_state);
+    must_let!(let VectorIndexState::Backfilled {
+        snapshot: VectorIndexSnapshot { data: VectorIndexSnapshotData::MultiSegment(segments), .. },
+        ..
+    } = on_disk_state);
     assert_eq!(segments.len(), 1);
 
     // Enable the index
@@ -1000,7 +1007,8 @@ async fn test_multi_segment_search_obeys_sorted_order(rt: TestRuntime) -> anyhow
             .add_document_vec_array(index_name.table(), vector)
             .await?;
         ids.push(id);
-        let mut worker = fixtures.new_index_flusher_with_full_scan_threshold(0)?;
+        let worker =
+            fixtures.new_index_flusher_with_full_scan_threshold(0, FlusherType::LiveFlush)?;
         let (metrics, _) = worker.step().await?;
         assert_eq!(metrics, btreemap! {resolved_index_name.clone() => 1});
     }

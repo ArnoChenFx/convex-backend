@@ -2,7 +2,7 @@ import "@testing-library/jest-dom";
 import React from "react";
 import { renderHook, act } from "@testing-library/react";
 import mockRouter from "next-router-mock";
-import { FilterExpression } from "system-udfs/convex/_system/frontend/lib/filters";
+import { DatabaseFilterExpression } from "system-udfs/convex/_system/frontend/lib/filters";
 import { encodeURI } from "js-base64";
 import { DeploymentInfoContext } from "../../../lib/deploymentContext";
 import { mockDeploymentInfo } from "../../../lib/mockDeploymentInfo";
@@ -39,7 +39,7 @@ describe("useTableFilters", () => {
       useTableFilters("test", null),
     );
     await act(async () => {
-      const newFilters: FilterExpression = {
+      const newFilters: DatabaseFilterExpression = {
         clauses: [
           {
             field: "test",
@@ -48,7 +48,7 @@ describe("useTableFilters", () => {
           },
         ],
       };
-      await result.current.changeFilters(newFilters);
+      await result.current.applyFiltersWithHistory(newFilters);
     });
     expect(result.current.filters).toEqual({
       clauses: [
@@ -65,30 +65,30 @@ describe("useTableFilters", () => {
     const { result } = renderWithDeploymentInfo(() =>
       useTableFilters("test", null),
     );
-    const validFilters: FilterExpression = {
+    const validFilters: DatabaseFilterExpression = {
       clauses: [
         { op: "eq", field: "field1", id: "", value: "", enabled: true },
       ],
     };
-    const invalidFilters: FilterExpression = {
+    const invalidFilters: DatabaseFilterExpression = {
       clauses: [{ op: "eq", field: undefined, id: "", enabled: true }],
     };
-    const noFilters: FilterExpression = {
+    const noFilters: DatabaseFilterExpression = {
       clauses: [],
     };
 
     await act(async () => {
-      await result.current.changeFilters(validFilters);
+      await result.current.applyFiltersWithHistory(validFilters);
     });
     expect(result.current.hasFilters).toBe(true);
 
     await act(async () => {
-      await result.current.changeFilters(invalidFilters);
+      await result.current.applyFiltersWithHistory(invalidFilters);
     });
     expect(result.current.hasFilters).toBe(false);
 
     await act(async () => {
-      await result.current.changeFilters(noFilters);
+      await result.current.applyFiltersWithHistory(noFilters);
     });
     expect(result.current.hasFilters).toBe(false);
   });
@@ -96,7 +96,7 @@ describe("useTableFilters", () => {
   it("should preserve filter state when switching between tables", async () => {
     const table1 = "table1";
     const table2 = "table2";
-    const filtersTable1: FilterExpression = {
+    const filtersTable1: DatabaseFilterExpression = {
       clauses: [{ op: "eq", field: "field1", id: "", value: "" }],
     };
 
@@ -106,7 +106,7 @@ describe("useTableFilters", () => {
       table1,
     );
     await act(async () => {
-      await result.current.changeFilters(filtersTable1);
+      await result.current.applyFiltersWithHistory(filtersTable1);
     });
 
     // The filters should be the same as the filters for table1.
@@ -134,7 +134,7 @@ describe("useTableFilters", () => {
 
   it("should use filters from the query parameter on mount", () => {
     const tableName = "table1";
-    const queryFilters: FilterExpression = {
+    const queryFilters: DatabaseFilterExpression = {
       clauses: [{ op: "eq", field: "field1", id: "", value: "" }],
     };
 
@@ -153,10 +153,10 @@ describe("useTableFilters", () => {
   it("should replace stored filters if there are query filters set when the table is changed.", () => {
     const table1 = "table1";
     const table2 = "table2";
-    const filtersTable1: FilterExpression = {
+    const filtersTable1: DatabaseFilterExpression = {
       clauses: [{ op: "eq", field: "field1", id: "", value: "" }],
     };
-    const filtersTable2: FilterExpression = {
+    const filtersTable2: DatabaseFilterExpression = {
       clauses: [{ op: "eq", field: "field2", id: "", value: "" }],
     };
 
@@ -199,7 +199,7 @@ describe("useTableFilters", () => {
 
   it("should clear out filters when the filter has empty clauses", async () => {
     const tableName = "table1";
-    const newFilters: FilterExpression = {
+    const newFilters: DatabaseFilterExpression = {
       clauses: [],
     };
 
@@ -215,7 +215,7 @@ describe("useTableFilters", () => {
 
   it("should update the query parameter when filters are changed", async () => {
     const tableName = "table1";
-    const newFilters: FilterExpression = {
+    const newFilters: DatabaseFilterExpression = {
       clauses: [{ op: "eq", field: "field1", id: "", value: "" }],
     };
 
@@ -227,7 +227,7 @@ describe("useTableFilters", () => {
     expect(mockRouter.query.filters).toBeUndefined();
     // Change the filters.
     await act(async () => {
-      await result.current.changeFilters(newFilters);
+      await result.current.applyFiltersWithHistory(newFilters);
     });
 
     // The query parameter should be updated with the new filters.
@@ -240,7 +240,7 @@ describe("useTableFilters", () => {
   // TODO: Find a new way to make this test work, or wait for next-router-mock to support `isReady`.
   // it("should update filters when router becomes ready", async () => {
   //   const tableName = "table1";
-  //   const queryFilters: FilterExpression = {
+  //   const queryFilters: DatabaseFilterExpression = {
   //     clauses: [{ op: "eq", field: "field1", id: "", value: "" }],
   //   };
 
@@ -271,7 +271,7 @@ describe("useTableFilters", () => {
 
 describe("useFilterMap", () => {
   it("should convert filters to a map", () => {
-    const filters: FilterExpression = {
+    const filters: DatabaseFilterExpression = {
       clauses: [
         {
           field: "test",

@@ -49,6 +49,7 @@ use crate::{
         SystemTable,
     },
     ResolvedQuery,
+    SchemaValidationProgressModel,
     SystemMetadataModel,
     TableModel,
     Transaction,
@@ -294,6 +295,7 @@ impl<'a, RT: Runtime> SchemaModel<'a, RT> {
                         patch_value!("state" => Some(SchemaState::Validated.try_into()?))?,
                     )
                     .await?;
+                tracing::info!("Marked pending schema as validated");
                 Ok(())
             },
             SchemaState::Validated => Err(anyhow::anyhow!("Schema is already validated.")),
@@ -343,6 +345,8 @@ impl<'a, RT: Runtime> SchemaModel<'a, RT> {
     pub async fn mark_active(&mut self, document_id: ResolvedDocumentId) -> anyhow::Result<()> {
         // Make sure it's already Validated or Active.
         let schema = self.get_validated_or_active(document_id).await?;
+        let mut model = SchemaValidationProgressModel::new(self.tx, self.namespace);
+        model.delete_schema_validation_progress(document_id).await?;
         match schema.state {
             // Already active: no-op
             SchemaState::Active => Ok(()),
@@ -408,6 +412,8 @@ impl<'a, RT: Runtime> SchemaModel<'a, RT> {
             SchemaState::Failed { .. } | SchemaState::Overwritten => {},
         }
         self.delete_old_failed_and_overwritten_schemas().await?;
+        let mut model = SchemaValidationProgressModel::new(self.tx, self.namespace);
+        model.delete_schema_validation_progress(document_id).await?;
         Ok(())
     }
 
@@ -479,6 +485,8 @@ impl<'a, RT: Runtime> SchemaModel<'a, RT> {
             )
             .await?;
         self.delete_old_failed_and_overwritten_schemas().await?;
+        let mut model = SchemaValidationProgressModel::new(self.tx, self.namespace);
+        model.delete_schema_validation_progress(id).await?;
         Ok(())
     }
 }

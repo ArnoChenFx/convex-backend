@@ -1,5 +1,6 @@
 import { vi, test, expect } from "vitest";
-import { logFailure, oneoffContext } from "../../../bundler/context.js";
+import { oneoffContext } from "../../../bundler/context.js";
+import { logFailure } from "../../../bundler/log.js";
 import { findLatestVersionWithBinary } from "./download.js";
 import { components } from "@octokit/openapi-types";
 import stripAnsi from "strip-ansi";
@@ -14,7 +15,7 @@ async function setupContext() {
     ...originalContext,
     crash: (args: { printedMessage: string | null }) => {
       if (args.printedMessage !== null) {
-        logFailure(originalContext, args.printedMessage);
+        logFailure(args.printedMessage);
       }
       throw new Error();
     },
@@ -37,7 +38,7 @@ test("findLatestVersionWithBinary", async () => {
       } as Response),
     );
 
-    const expected = await findLatestVersionWithBinary(ctx);
+    const expected = await findLatestVersionWithBinary(ctx, true);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(fetchSpy).toHaveBeenCalledWith(
       "https://api.github.com/repos/get-convex/convex-backend/releases?per_page=30",
@@ -55,7 +56,7 @@ test("findLatestVersionWithBinary", async () => {
     );
     stderrSpy.mockClear();
 
-    await expect(findLatestVersionWithBinary(ctx)).rejects.toThrow();
+    await expect(findLatestVersionWithBinary(ctx, true)).rejects.toThrow();
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(fetchSpy).toHaveBeenCalledWith(
       "https://api.github.com/repos/get-convex/convex-backend/releases?per_page=30",

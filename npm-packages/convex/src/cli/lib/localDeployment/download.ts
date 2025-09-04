@@ -1,11 +1,13 @@
 import AdmZip from "adm-zip";
+import { Context } from "../../../bundler/context.js";
 import {
-  Context,
   logFinishedStep,
   startLogProgress,
   logVerbose,
   logMessage,
-} from "../../../bundler/context.js";
+  logError,
+  logWarning,
+} from "../../../bundler/log.js";
 import {
   dashboardZip,
   executablePath,
@@ -38,12 +40,27 @@ type GitHubRelease = components["schemas"]["release"];
 
 export async function ensureBackendBinaryDownloaded(
   ctx: Context,
-  version: { kind: "latest" } | { kind: "version"; version: string },
+  version:
+    | { kind: "latest"; allowedVersion?: string }
+    | { kind: "version"; version: string },
 ): Promise<{ binaryPath: string; version: string }> {
   if (version.kind === "version") {
     return _ensureBackendBinaryDownloaded(ctx, version.version);
   }
-  const latestVersionWithBinary = await findLatestVersionWithBinary(ctx);
+  if (version.allowedVersion) {
+    const latestVersionWithBinary = await findLatestVersionWithBinary(
+      ctx,
+      false,
+    );
+    if (latestVersionWithBinary === null) {
+      logWarning(
+        `Failed to get latest version from GitHub, using downloaded version ${version.allowedVersion}`,
+      );
+      return _ensureBackendBinaryDownloaded(ctx, version.allowedVersion);
+    }
+    return _ensureBackendBinaryDownloaded(ctx, latestVersionWithBinary);
+  }
+  const latestVersionWithBinary = await findLatestVersionWithBinary(ctx, true);
   return _ensureBackendBinaryDownloaded(ctx, latestVersionWithBinary);
 }
 
@@ -51,10 +68,10 @@ async function _ensureBackendBinaryDownloaded(
   ctx: Context,
   version: string,
 ): Promise<{ binaryPath: string; version: string }> {
-  logVerbose(ctx, `Ensuring backend binary downloaded for version ${version}`);
+  logVerbose(`Ensuring backend binary downloaded for version ${version}`);
   const existingDownload = await checkForExistingDownload(ctx, version);
   if (existingDownload !== null) {
-    logVerbose(ctx, `Using existing download at ${existingDownload}`);
+    logVerbose(`Using existing download at ${existingDownload}`);
     return {
       binaryPath: existingDownload,
       version,
@@ -94,12 +111,29 @@ function parseLinkHeader(header: string): {
  * Finds the latest version of the convex backend that has a binary that works
  * on this platform.
  */
-export async function findLatestVersionWithBinary(
+export async function findLatestVersionWithBinary<
+  RequireSuccess extends boolean,
+>(
   ctx: Context,
-): Promise<string> {
+  requireSuccess: RequireSuccess,
+): Promise<RequireSuccess extends true ? string : string | null> {
+  // These shouldn't crash when there's a perfectly good binary already available.
+  async function maybeCrash(
+    ...args: Parameters<typeof ctx.crash>
+  ): Promise<RequireSuccess extends true ? never : null> {
+    if (requireSuccess) {
+      return await ctx.crash(...args);
+    }
+    if (args[0].printedMessage) {
+      logError(args[0].printedMessage);
+    } else {
+      logError("Error downloading latest binary");
+    }
+    return null as RequireSuccess extends true ? never : null;
+  }
+
   const targetName = getDownloadPath();
   logVerbose(
-    ctx,
     `Finding latest stable release containing binary named ${targetName}`,
   );
   let latestVersion: string | undefined;
@@ -112,7 +146,7 @@ export async function findLatestVersionWithBinary(
 
       if (!response.ok) {
         const text = await response.text();
-        return await ctx.crash({
+        return await maybeCrash({
           exitCode: 1,
           errorType: "fatal",
           printedMessage: `GitHub API returned ${response.status}: ${text}`,
@@ -131,7 +165,7 @@ export async function findLatestVersionWithBinary(
         // Track the latest stable version we've seen even if it doesn't have our binary
         if (!latestVersion && !release.prerelease && !release.draft) {
           latestVersion = release.tag_name;
-          logVerbose(ctx, `Latest stable version is ${latestVersion}`);
+          logVerbose(`Latest stable version is ${latestVersion}`);
         }
 
         // Only consider stable releases
@@ -139,14 +173,12 @@ export async function findLatestVersionWithBinary(
           // Check if this release has our binary
           if (release.assets.find((asset) => asset.name === targetName)) {
             logVerbose(
-              ctx,
               `Latest stable version with appropriate binary is ${release.tag_name}`,
             );
             return release.tag_name;
           }
 
           logVerbose(
-            ctx,
             `Version ${release.tag_name} does not contain a ${targetName}, checking previous version`,
           );
         }
@@ -164,7 +196,7 @@ export async function findLatestVersionWithBinary(
 
     // If we get here, we didn't find any suitable releases
     if (!latestVersion) {
-      return await ctx.crash({
+      return await maybeCrash({
         exitCode: 1,
         errorType: "fatal",
         printedMessage:
@@ -177,14 +209,14 @@ export async function findLatestVersionWithBinary(
 
     // If we found stable releases but none had our binary
     const message = `Failed to find a convex backend release that contained ${targetName}.`;
-    return await ctx.crash({
+    return await maybeCrash({
       exitCode: 1,
       errorType: "fatal",
       printedMessage: message,
       errForSentry: new LocalDeploymentError(message),
     });
   } catch (e) {
-    return await ctx.crash({
+    return maybeCrash({
       exitCode: 1,
       errorType: "fatal",
       printedMessage: "Failed to get latest convex backend releases",
@@ -239,7 +271,7 @@ async function downloadBackendBinary(
       const name = executableName();
       const tempExecPath = path.join(unzippedPath, name);
       await makeExecutable(tempExecPath);
-      logVerbose(ctx, "Marked as executable");
+      logVerbose("Marked as executable");
       ctx.fs.mkdir(versionedBinaryDir(version), { recursive: true });
       ctx.fs.swapTmpFile(tempExecPath as TempPath, executablePath(version));
     },
@@ -296,7 +328,6 @@ async function downloadZipFile(
   let progressBar: ProgressBar | null = null;
   if (!isNaN(contentLength) && contentLength !== 0 && process.stdout.isTTY) {
     progressBar = startLogProgress(
-      ctx,
       `Downloading ${nameForLogging} [:bar] :percent :etas`,
       {
         width: 40,
@@ -305,7 +336,7 @@ async function downloadZipFile(
       },
     );
   } else {
-    logMessage(ctx, `Downloading ${nameForLogging}`);
+    logMessage(`Downloading ${nameForLogging}`);
   }
   if (response.status !== 200) {
     return await ctx.crash({
@@ -315,7 +346,7 @@ async function downloadZipFile(
     });
   }
   await withTmpDir(async (tmpDir) => {
-    logVerbose(ctx, `Created tmp dir ${tmpDir.path}`);
+    logVerbose(`Created tmp dir ${tmpDir.path}`);
     // Create a file in the tmp dir
     const zipLocation = tmpDir.registerTempPath(null);
     const readable = Readable.fromWeb(response.body! as any);
@@ -326,15 +357,15 @@ async function downloadZipFile(
     });
     if (progressBar) {
       progressBar.terminate();
-      logFinishedStep(ctx, `Downloaded ${nameForLogging}`);
+      logFinishedStep(`Downloaded ${nameForLogging}`);
     }
-    logVerbose(ctx, "Downloaded zip file");
+    logVerbose("Downloaded zip file");
 
     const zip = new AdmZip(zipLocation);
     await withTmpDir(async (versionDir) => {
-      logVerbose(ctx, `Created tmp dir ${versionDir.path}`);
+      logVerbose(`Created tmp dir ${versionDir.path}`);
       zip.extractAllTo(versionDir.path, true);
-      logVerbose(ctx, "Extracted from zip file");
+      logVerbose("Extracted from zip file");
       await args.onDownloadComplete(ctx, versionDir.path);
     });
   });
@@ -361,7 +392,7 @@ async function _ensureDashboardDownloaded(ctx: Context, version: string) {
     nameForLogging: "Convex dashboard",
     onDownloadComplete: async (ctx, unzippedPath) => {
       await recursivelyCopy(ctx, nodeFs, unzippedPath, outDir);
-      logVerbose(ctx, "Copied into out dir");
+      logVerbose("Copied into out dir");
     },
   });
   return outDir;

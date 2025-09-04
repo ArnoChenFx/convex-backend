@@ -10,6 +10,9 @@ type TableDefinition = {
   indexes: Index[];
   searchIndexes: SearchIndex[];
   vectorIndexes?: VectorIndex[];
+  stagedDbIndexes?: Index[];
+  stagedSearchIndexes?: SearchIndex[];
+  stagedVectorIndexes?: VectorIndex[];
   documentType: ValidatorJSON | null;
 };
 
@@ -142,7 +145,7 @@ export function displaySchemaFromShape({
       return `v.any()`;
     default: {
       // Enforce that the switch-case is exhaustive.
-      const _: never = variant;
+      variant satisfies never;
       throw new Error(`Unrecognized variant ${shape.type} in ${shape}`);
     }
   }
@@ -235,33 +238,39 @@ function displayValidator(validator: ValidatorJSON): string {
         .join(",\n")})`;
     default: {
       // Enforce that the switch-case is exhaustive.
-      const _: never = validator;
+      validator satisfies never;
       throw new Error(`Unrecognized validator variant: ${validator}`);
     }
   }
 }
 
-function displayIndexes(indexes: Index[]): string {
+function displayIndexes(indexes: Index[], type: "staged" | "active"): string {
   return indexes
-    .map(
-      (index) =>
-        `.index("${index.indexDescriptor}", [${index.fields
-          // Filter out system fields that start with underscore. Ideally these are filtered out in backend (CX-3805), but for now we do it here.
-          .filter((field) => (field.length > 0 ? field[0] !== "_" : true))
-          .map((field) => `"${field}"`)
-          .join(",")}])`,
-    )
+    .map((index) => {
+      const fields = `[${index.fields
+        // Filter out system fields that start with underscore. Ideally these are filtered out in backend (CX-3805), but for now we do it here.
+        .filter((field) => (field.length > 0 ? field[0] !== "_" : true))
+        .map((field) => `"${field}"`)
+        .join(",")}]`;
+      return type === "staged"
+        ? `.index("${index.indexDescriptor}", { fields: ${fields}, staged: true })`
+        : `.index("${index.indexDescriptor}", ${fields})`;
+    })
     .join("");
 }
 
-function displaySearchIndexes(searchIndexes: SearchIndex[]): string {
+function displaySearchIndexes(
+  searchIndexes: SearchIndex[],
+  type: "staged" | "active",
+): string {
   return searchIndexes
     .map(
       (searchIndex) =>
         `.searchIndex("${searchIndex.indexDescriptor}", {searchField: "${
           searchIndex.searchField
         }"
-        ${appendFilterFieldsOrEmpty(searchIndex)}})`,
+        ${appendFilterFieldsOrEmpty(searchIndex)}
+        ${appendStagedOrEmpty(type)}})`,
     )
     .join("");
 }
@@ -274,13 +283,21 @@ function appendFilterFieldsOrEmpty(index: SearchIndex | VectorIndex): string {
     : "";
 }
 
-function displayVectorIndexes(vectorIndexes: VectorIndex[]): string {
+function appendStagedOrEmpty(type: "staged" | "active"): string {
+  return type === "staged" ? ", staged: true" : "";
+}
+
+function displayVectorIndexes(
+  vectorIndexes: VectorIndex[],
+  type: "staged" | "active",
+): string {
   return vectorIndexes
     .map(
       (vectorIndex) => `.vectorIndex("${vectorIndex.indexDescriptor}"
         , {vectorField: "${vectorIndex.vectorField}"
         , dimensions: ${vectorIndex.dimensions}
         ${appendFilterFieldsOrEmpty(vectorIndex)}
+        ${appendStagedOrEmpty(type)}
       })`,
     )
     .join("");
@@ -291,9 +308,14 @@ function displayTableDefinition(tableDefinition: TableDefinition): string {
     tableDefinition.documentType ?? { type: "any" },
   );
   return `${tableDefinition.tableName}: defineTable(${documentType}
-  )${displayIndexes(tableDefinition.indexes)}${displaySearchIndexes(
-    tableDefinition.searchIndexes,
-  )}${displayVectorIndexes(tableDefinition.vectorIndexes ?? [])}`;
+  )${
+    displayIndexes(tableDefinition.indexes, "active") +
+    displayIndexes(tableDefinition.stagedDbIndexes ?? [], "staged") +
+    displaySearchIndexes(tableDefinition.searchIndexes, "active") +
+    displaySearchIndexes(tableDefinition.stagedSearchIndexes ?? [], "staged") +
+    displayVectorIndexes(tableDefinition.vectorIndexes ?? [], "active") +
+    displayVectorIndexes(tableDefinition.stagedVectorIndexes ?? [], "staged")
+  }`;
 }
 
 export function displaySchema(schema: SchemaJson, relativePath = "") {
@@ -422,3 +444,43 @@ export function toNumericUTC(dateString: string) {
   const [year, month, day] = dateString.split("-");
   return Date.UTC(Number(year), Number(month) - 1, Number(day));
 }
+
+export const timeLabelForMinute = (value: string) => {
+  if (!value) {
+    return "";
+  }
+  // TODO(ari): Consolidate all the time rendering logic - this is a hack
+  // for now
+  if (value.includes("-") || !value.includes(":")) {
+    return value;
+  }
+  const [time, modifier] = value.split(" ");
+  const [hours, minutes] = time.split(":");
+  const date = new Date();
+  const hourValue = parseInt(hours);
+
+  // Handle 12-hour to 24-hour conversion
+  let hour24 = hourValue;
+  if (modifier === "PM" && hourValue !== 12) {
+    hour24 = hourValue + 12;
+  } else if (modifier === "AM" && hourValue === 12) {
+    hour24 = 0;
+  }
+
+  date.setHours(hour24);
+  date.setMinutes(parseInt(minutes));
+  const oneMinuteLater = new Date(date);
+  oneMinuteLater.setMinutes(date.getMinutes() + 1);
+
+  return `${formatTime(date)} – ${formatTime(oneMinuteLater)}`;
+};
+
+const formatTime = (date: Date) => {
+  let hours = date.getHours();
+  const minutes = date.getMinutes();
+  const ampm = hours >= 12 ? "PM" : "AM";
+  hours %= 12;
+  hours = hours || 12; // the hour '0' should be '12'
+  const strMinutes = minutes < 10 ? `0${minutes}` : minutes;
+  return `${hours}:${strMinutes} ${ampm}`;
+};

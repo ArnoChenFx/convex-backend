@@ -1,10 +1,21 @@
 import { useBBMutation, useBBQuery } from "./api";
 
-export type AccessTokenListKind = "deployment" | "project";
+export type AccessTokenListKind = "deployment" | "project" | "team";
 
 export function useTeamAccessTokens(teamId?: number) {
   const { data: accessTokens } = useBBQuery({
     path: "/teams/{team_id}/access_tokens",
+    pathParams: {
+      team_id: teamId?.toString() || "",
+    },
+  });
+
+  return accessTokens;
+}
+
+export function useTeamAppAccessTokens(teamId?: number) {
+  const { data: accessTokens } = useBBQuery({
+    path: "/teams/{team_id}/app_access_tokens",
     pathParams: {
       team_id: teamId?.toString() || "",
     },
@@ -56,31 +67,33 @@ export function useDeleteAccessToken(
     mutateKey:
       kind === "deployment"
         ? "/instances/{deployment_name}/access_tokens"
-        : "/projects/{project_id}/access_tokens",
+        : kind === "project"
+          ? "/projects/{project_id}/access_tokens"
+          : "/teams/{team_id}/access_tokens",
     mutatePathParams:
       kind === "deployment"
         ? { deployment_name: identifier }
-        : { project_id: identifier },
+        : kind === "project"
+          ? { project_id: identifier }
+          : { team_id: identifier },
     successToast: "Access token deleted.",
   });
 }
 
-export function useDeleteTeamAccessToken(teamId: number) {
-  return useBBMutation({
-    path: "/teams/delete_access_token",
-    pathParams: undefined,
-    mutateKey: "/teams/{team_id}/access_tokens",
-    mutatePathParams: { team_id: teamId.toString() },
-    successToast: "Access token deleted.",
-  });
-}
-
-export function useDeleteAppAccessTokenByName(projectId: number) {
+export function useDeleteAppAccessTokenByName(
+  args: { projectId: number } | { teamId: number },
+) {
   return useBBMutation({
     path: "/delete_access_token",
     pathParams: undefined,
-    mutateKey: "/projects/{project_id}/app_access_tokens",
-    mutatePathParams: { project_id: projectId.toString() },
+    mutateKey:
+      "projectId" in args
+        ? "/projects/{project_id}/app_access_tokens"
+        : "/teams/{team_id}/app_access_tokens",
+    mutatePathParams:
+      "projectId" in args
+        ? { project_id: args.projectId.toString() }
+        : { team_id: args.teamId.toString() },
     successToast: "Application access revoked.",
   });
 }
@@ -89,6 +102,7 @@ export function useCreateTeamAccessToken(
   params:
     | { kind: "deployment"; deploymentName: string }
     | { kind: "project"; projectId: number }
+    | { kind: "team"; teamId: number }
     | { kind: "doNotMutate" },
 ) {
   return useBBMutation({
@@ -99,7 +113,9 @@ export function useCreateTeamAccessToken(
         ? undefined
         : params.kind === "deployment"
           ? "/instances/{deployment_name}/access_tokens"
-          : "/projects/{project_id}/access_tokens",
+          : params.kind === "project"
+            ? "/projects/{project_id}/access_tokens"
+            : "/teams/{team_id}/access_tokens",
     mutatePathParams:
       params.kind === "doNotMutate"
         ? undefined
@@ -107,9 +123,13 @@ export function useCreateTeamAccessToken(
           ? {
               deployment_name: params.deploymentName,
             }
-          : {
-              project_id: params.projectId.toString(),
-            },
+          : params.kind === "project"
+            ? {
+                project_id: params.projectId.toString(),
+              }
+            : {
+                team_id: params.teamId.toString(),
+              },
     successToast:
       params.kind === "doNotMutate" ? undefined : "Access token created.",
   });
@@ -119,5 +139,6 @@ export function useAuthorizeApp() {
   return useBBMutation({
     path: "/authorize_app",
     pathParams: undefined,
+    toastOnError: false,
   });
 }

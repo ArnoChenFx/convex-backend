@@ -110,9 +110,8 @@ impl<RT: Runtime> IsolateEnvironment<RT> for AuthConfigEnvironment {
                     // Special cased in Convex CLI!!!
                     "AuthConfigMissingEnvironmentVariable",
                     format!(
-                        "Environment variable {} is used in auth config file but its value was \
-                         not set",
-                        name
+                        "Environment variable {name} is used in auth config file but its value \
+                         was not set"
                     ),
                 ))
             })
@@ -245,19 +244,91 @@ impl AuthConfigEnvironment {
         let default_str = strings::default.create(&mut scope)?;
         let config_val: v8::Local<v8::Value> = namespace
             .get(&mut scope, default_str.into())
-            .ok_or(AuthConfigMissingExportError)?;
+            .ok_or_else(missing_export_error)?;
         if config_val.is_null_or_undefined() {
-            anyhow::bail!(AuthConfigMissingExportError);
+            anyhow::bail!(missing_export_error());
         }
 
         let config_str = json_stringify(&mut scope, config_val)?;
+
+        // Custom errors for misconfigured `convex/auth.config.ts` files that
+        // are helpful because we allow extra properties in the
+        // authoritative deserialization.
+        check_for_common_confusions(&config_str)?;
+
         let config: AuthConfig = serde_json::from_str::<SerializedAuthConfig>(&config_str)
-            .map_err(|error| AuthConfigNotMatchingSchemaError {
-                error: strip_position(&error.to_string()),
-            })?
+            .map_err(|error| config_not_matching_schema_error(strip_position(&error.to_string())))?
             .try_into()?;
         Ok(config)
     }
+}
+
+fn check_for_common_confusions(config_str: &str) -> anyhow::Result<()> {
+    let raw_config: JsonValue = serde_json::from_str(config_str)
+        .map_err(|error| config_not_matching_schema_error(strip_position(&error.to_string())))?;
+
+    if let JsonValue::Object(ref config_obj) = raw_config {
+        if let Some(JsonValue::Array(providers)) = config_obj.get("providers") {
+            for (index, config_obj) in providers.iter().enumerate() {
+                if let JsonValue::Object(obj) = config_obj {
+                    let has_domain = obj.contains_key("domain");
+                    let has_issuer = obj.contains_key("issuer");
+                    let issuer = obj.get("issuer").and_then(|v| v.as_str());
+                    let has_bad_application_id =
+                        obj.contains_key("applicationId") || obj.contains_key("applicationid");
+                    let has_application_id = obj.contains_key("applicationID");
+                    let type_value = obj
+                        .get("type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown");
+                    if has_bad_application_id {
+                        anyhow::bail!(config_not_matching_schema_error(format!(
+                            "Provider at index {index} must have applicationID property spelled \
+                             lowercase 'application', capital I, capital D."
+                        )));
+                    }
+                    if type_value != "customJwt" && type_value != "oidc" && type_value != "unknown"
+                    {
+                        anyhow::bail!(config_not_matching_schema_error(format!(
+                            "Provider at index {index} has unexpected 'type' value '{type_value}'"
+                        )));
+                    }
+
+                    if type_value == "customJwt" && has_domain {
+                        anyhow::bail!(config_not_matching_schema_error(format!(
+                            "Provider at index {index} is a customJwt so cannot have a 'domain' \
+                             specified",
+                        )));
+                    }
+
+                    let is_oidc = type_value == "oidc" || type_value == "unknown";
+                    if is_oidc && has_issuer {
+                        anyhow::bail!(config_not_matching_schema_error(format!(
+                            "Provider at index {index} is oidc so cannot have an 'issuer' \
+                             specified.",
+                        )));
+                    }
+
+                    if !has_application_id
+                        && (issuer == Some("https://api.workos.com/")
+                            || issuer == Some("https://api.workos.com"))
+                    {
+                        anyhow::bail!(ErrorMetadata::bad_request(
+                            "InsecureConfiguration",
+                            format!(
+                                "This auth configuration appears potentially insecure: Provider \
+                                 at index {index} has an issuer that is shared among many \
+                                 applications, so must to specify an ApplicationID to check \
+                                 against an `aud` field of a JWT.",
+                            ),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 // It's not meaningful for the user to see the serialized
@@ -279,7 +350,12 @@ fn json_stringify(
     let json_stringify_fn = v8::Local::<v8::Function>::try_from(json_stringify_fn).unwrap();
     let result = json_stringify_fn
         .call(scope, value, &[value])
-        .ok_or(AuthConfigUnserializableError)?;
+        .ok_or_else(|| {
+            ErrorMetadata::bad_request(
+                "AuthConfigUnserializableError",
+                format!("auth config file can only contain strings {SEE_AUTH_DOCS}"),
+            )
+        })?;
     let result: v8::Local<v8::String> = result.try_into()?;
     helpers::to_rust_string(scope, &result)
 }
@@ -287,16 +363,64 @@ fn json_stringify(
 const SEE_AUTH_DOCS: &str =
     "To learn more, see the auth documentation at https://docs.convex.dev/auth.";
 
-#[derive(thiserror::Error, Debug, Clone, PartialEq)]
-#[error("auth config file is missing default export. {SEE_AUTH_DOCS}")]
-pub struct AuthConfigMissingExportError;
+pub fn missing_export_error() -> ErrorMetadata {
+    ErrorMetadata::bad_request(
+        "AuthConfigMissingExportError",
+        format!("auth config file is missing default export. {SEE_AUTH_DOCS}"),
+    )
+}
 
-#[derive(thiserror::Error, Debug, Clone, PartialEq)]
-#[error("auth config file can only contain strings {SEE_AUTH_DOCS}")]
-pub struct AuthConfigUnserializableError;
+pub fn config_not_matching_schema_error(error: String) -> ErrorMetadata {
+    ErrorMetadata::bad_request(
+        "AuthConfigNotMatchingSchemaError",
+        format!("auth config file must include a list of provider credentials: {error}"),
+    )
+}
 
-#[derive(thiserror::Error, Debug, Clone, PartialEq)]
-#[error("auth config file must include a list of provider credentials: {error}")]
-pub struct AuthConfigNotMatchingSchemaError {
-    error: String,
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_traditional_oidc() -> anyhow::Result<()> {
+        // not "legacy" because we'll support it forever, the only legacy aspect is not
+        // having a "type" field.
+        let valid_config = r#"{"providers": [{"domain": "a", "applicationID": "b"}]}"#;
+        check_for_common_confusions(valid_config)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_newer_oidc() -> anyhow::Result<()> {
+        let valid_config =
+            r#"{"providers": [{"type": "oidc", "domain": "example.com", "applicationID": "c"}]}"#;
+        check_for_common_confusions(valid_config)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_misspell_application_id() -> anyhow::Result<()> {
+        let invalid_config = r#"{"providers": [{"domain": "example.com", "applicationId": "b"}]}"#;
+        let result = check_for_common_confusions(invalid_config);
+        assert!(result.is_err());
+        let error_message = result.unwrap_err().to_string();
+        assert!(error_message.contains("applicationID"));
+        assert!(error_message.contains("spelled lowercase 'application', capital I, capital D."));
+        Ok(())
+    }
+
+    #[test]
+    fn test_valid_custom_jwt() -> anyhow::Result<()> {
+        let valid_config = r#"{ "providers": [ { "type": "customJwt", "applicationID": "your-application-id", "issuer": "https://your.issuer.url.com", "jwks": "https://your.issuer.url.com/.well-known/jwks.json", "algorithm": "RS256" }]}"#;
+
+        check_for_common_confusions(valid_config)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_valid_custom_jwt_without_application() -> anyhow::Result<()> {
+        let valid_config = r#"{ "providers": [ { "type": "customJwt", "issuer": "https://your.issuer.url.com", "jwks": "https://your.issuer.url.com/.well-known/jwks.json", "algorithm": "RS256" }]}"#;
+        check_for_common_confusions(valid_config)?;
+        Ok(())
+    }
 }

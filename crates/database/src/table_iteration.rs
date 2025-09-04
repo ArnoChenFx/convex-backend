@@ -114,6 +114,11 @@ impl<RT: Runtime> TableIterator<RT> {
         }
     }
 
+    pub fn with_page_size(mut self, page_size: usize) -> Self {
+        self.inner.page_size = page_size;
+        self
+    }
+
     /// Create a `MultiTableIterator`, which can iterate multiple tables at the
     /// same snapshot timestamp. This is more efficient than creating a separate
     /// `TableIterator` for each table since each table can share the work of
@@ -632,7 +637,7 @@ impl<RT: Runtime> TableIteratorInner<RT> {
                     ts, value, prev_ts, ..
                 } = old_revisions
                     .remove(&make_query(&q))
-                    .with_context(|| format!("Missing revision at snapshot: {:?}", q))?;
+                    .with_context(|| format!("Missing revision at snapshot: {q:?}"))?;
                 let Some(value) = value else { continue };
                 yield LatestDocument { ts, value, prev_ts };
             }
@@ -842,7 +847,6 @@ mod tests {
             DbFixtures,
         },
         IndexModel,
-        IndexWorker,
         TestFacingModel,
         Transaction,
         UserFacingModel,
@@ -1052,11 +1056,7 @@ mod tests {
 
     #[convex_macro::test_runtime]
     async fn test_index_key_change(rt: TestRuntime) -> anyhow::Result<()> {
-        let DbFixtures {
-            db: database,
-            tp: persistence,
-            ..
-        } = DbFixtures::new(&rt).await?;
+        let DbFixtures { db: database, .. } = DbFixtures::new(&rt).await?;
         let table_name: TableName = "a".parse()?;
 
         // Create a.by_k and backfill.
@@ -1071,13 +1071,6 @@ mod tests {
             )
             .await?;
         database.commit(tx).await?;
-        IndexWorker::new_terminating(
-            rt.clone(),
-            persistence.clone(),
-            database.retention_validator(),
-            database.clone(),
-        )
-        .await?;
 
         // Two documents, one which changes from "z" to "a".
         // In the first page, we read "a" and skip it.

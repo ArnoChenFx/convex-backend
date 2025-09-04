@@ -13,6 +13,7 @@ use std::{
         BTreeSet,
     },
     fmt::Debug,
+    iter,
     sync::{
         Arc,
         OnceLock,
@@ -25,6 +26,7 @@ use common::{
     bootstrap_model::index::{
         database_index::DatabaseIndexState,
         IndexConfig,
+        TabletIndexMetadata,
     },
     document::{
         PackedDocument,
@@ -58,6 +60,7 @@ use common::{
         DatabaseIndexValue,
         IndexId,
         IndexName,
+        PersistenceVersion,
         RepeatableTimestamp,
         TabletIndexName,
         Timestamp,
@@ -78,7 +81,6 @@ use imbl::{
 };
 use itertools::Itertools;
 use value::{
-    ResolvedDocumentId,
     TableMapping,
     TableName,
     TabletId,
@@ -101,7 +103,7 @@ pub trait InMemoryIndexes: Send + Sync {
         order: Order,
         tablet_id: TabletId,
         table_name: TableName,
-    ) -> anyhow::Result<Option<Vec<(IndexKeyBytes, Timestamp, LazyDocument)>>>;
+    ) -> anyhow::Result<Option<Vec<(IndexKeyBytes, Timestamp, MemoryDocument)>>>;
 }
 
 /// [`BackendInMemoryIndexes`] maintains in-memory database indexes. With the
@@ -123,11 +125,8 @@ impl InMemoryIndexes for BackendInMemoryIndexes {
         order: Order,
         _tablet_id: TabletId,
         _table_name: TableName,
-    ) -> anyhow::Result<Option<Vec<(IndexKeyBytes, Timestamp, LazyDocument)>>> {
-        Ok(self
-            .in_memory_indexes
-            .get(&index_id)
-            .map(|index_map| order.apply(index_map.range(interval)).collect()))
+    ) -> anyhow::Result<Option<Vec<(IndexKeyBytes, Timestamp, MemoryDocument)>>> {
+        self.range(index_id, interval, order)
     }
 }
 
@@ -135,7 +134,7 @@ impl BackendInMemoryIndexes {
     #[fastrace::trace]
     pub fn bootstrap(
         index_registry: &IndexRegistry,
-        index_documents: BTreeMap<ResolvedDocumentId, (Timestamp, PackedDocument)>,
+        index_documents: Vec<(Timestamp, PackedDocument)>,
         ts: Timestamp,
     ) -> anyhow::Result<Self> {
         // Load the indexes by_id index
@@ -143,7 +142,7 @@ impl BackendInMemoryIndexes {
             .get_enabled(&TabletIndexName::by_id(index_registry.index_table()))
             .context("Missing meta index")?;
         let mut meta_index_map = DatabaseIndexMap::new_at(ts);
-        for (ts, index_doc) in index_documents.into_values() {
+        for (ts, index_doc) in index_documents {
             let index_key = IndexKey::new(vec![], index_doc.developer_id());
             meta_index_map.insert(index_key.to_bytes(), ts, index_doc);
         }
@@ -154,6 +153,8 @@ impl BackendInMemoryIndexes {
         Ok(Self { in_memory_indexes })
     }
 
+    /// Fetch tables across all namespaces whose name is in `tables` and load
+    /// their enabled indexes into memory.
     #[fastrace::trace]
     pub async fn load_enabled_for_tables(
         &mut self,
@@ -163,7 +164,8 @@ impl BackendInMemoryIndexes {
         tables: &BTreeSet<TableName>,
     ) -> anyhow::Result<()> {
         let enabled_indexes = index_registry.all_enabled_indexes();
-        tracing::info!("Loading {} enabled indexes", enabled_indexes.len());
+        let mut indexes_by_table: BTreeMap<TabletId, Vec<_>> = BTreeMap::new();
+        let mut indexes_to_load = 0;
         for index_metadata in enabled_indexes {
             let table_name = table_mapping.tablet_name(*index_metadata.name.table())?;
             if tables.contains(&table_name) {
@@ -184,11 +186,23 @@ impl BackendInMemoryIndexes {
                     "Loading {table_name}.{} ...",
                     index_metadata.name.descriptor()
                 );
-                let (num_keys, total_bytes) = self
-                    .load_enabled(index_registry, &index_metadata.name, snapshot)
-                    .await?;
-                tracing::debug!("Loaded {num_keys} keys, {total_bytes} bytes.");
+                indexes_by_table
+                    .entry(*index_metadata.name.table())
+                    .or_default()
+                    .push(index_metadata);
+                indexes_to_load += 1;
             }
+        }
+        tracing::info!(
+            "Loading {} tables with {} indexes...",
+            indexes_by_table.len(),
+            indexes_to_load
+        );
+        for (tablet_id, index_metadatas) in indexes_by_table {
+            let (num_keys, total_bytes) = self
+                .load_enabled(tablet_id, index_metadatas, snapshot)
+                .await?;
+            tracing::debug!("Loaded {num_keys} keys, {total_bytes} bytes.");
         }
         Ok(())
     }
@@ -196,36 +210,46 @@ impl BackendInMemoryIndexes {
     #[fastrace::trace]
     pub async fn load_enabled(
         &mut self,
-        index_registry: &IndexRegistry,
-        index_name: &TabletIndexName,
+        tablet_id: TabletId,
+        mut indexes: Vec<ParsedDocument<TabletIndexMetadata>>,
         snapshot: &PersistenceSnapshot,
     ) -> anyhow::Result<(usize, usize)> {
-        let index = index_registry
-            .get_enabled(index_name)
-            .ok_or_else(|| anyhow::anyhow!("Attempting to load missing index {}", index_name))?;
-        if self.in_memory_indexes.contains_key(&index.id()) {
+        indexes.retain(|index| {
+            !self
+                .in_memory_indexes
+                .contains_key(&index.id().internal_id())
+        });
+        if indexes.is_empty() {
             // Already loaded in memory.
             return Ok((0, 0));
         }
-        if let IndexConfig::Database { on_disk_state, .. } = &index.metadata.config {
+        for index in &indexes {
             anyhow::ensure!(
-                *on_disk_state == DatabaseIndexState::Enabled,
-                "Attempting to load index {} that is not backfilled yet {:?}",
-                index.name(),
-                index.metadata,
+                *index.name.table() == tablet_id,
+                "Index is for wrong table {:?}",
+                index.name.table()
             );
-        } else {
-            anyhow::bail!(
-                "Attempted to load index {} that isn't a database index {:?}",
-                index.name(),
-                index.metadata
-            )
+            if let IndexConfig::Database { on_disk_state, .. } = &index.config {
+                anyhow::ensure!(
+                    *on_disk_state == DatabaseIndexState::Enabled,
+                    "Attempting to load index {} that is not backfilled yet {:?}",
+                    index.name,
+                    index,
+                );
+            } else {
+                anyhow::bail!(
+                    "Attempted to load index {} that isn't a database index {:?}",
+                    index.name,
+                    index,
+                )
+            }
         }
 
+        // Read the table using an arbitrary index from the list
         let entries: Vec<_> = snapshot
             .index_scan(
-                index.id(),
-                *index_name.table(),
+                indexes[0].id().internal_id(),
+                tablet_id,
                 &Interval::all(),
                 Order::Asc,
                 usize::MAX,
@@ -234,15 +258,62 @@ impl BackendInMemoryIndexes {
             .await?;
         let mut num_keys: usize = 0;
         let mut total_size: usize = 0;
-        let mut index_map = DatabaseIndexMap::new_at(*snapshot.timestamp());
-        for (key, rev) in entries.into_iter() {
+        let mut index_maps = vec![DatabaseIndexMap::new_at(*snapshot.timestamp()); indexes.len()];
+        for (_, rev) in entries.into_iter() {
             num_keys += 1;
             total_size += rev.value.value().size();
-            index_map.insert(key, rev.ts, PackedDocument::pack(&rev.value));
+            let doc = PackedDocument::pack(&rev.value);
+            // Calculate all the index keys. For simplicity we throw away the
+            // index key that we read from persistence and recalculate it.
+            for ((index, index_map), doc) in indexes
+                .iter()
+                .zip(&mut index_maps)
+                .zip(iter::repeat_n(doc, indexes.len()))
+            {
+                let IndexConfig::Database { spec, .. } = &index.config else {
+                    unreachable!()
+                };
+                let key = doc.index_key_owned(&spec.fields, snapshot.persistence().version());
+                index_map.insert(key, rev.ts, doc);
+            }
         }
 
-        self.in_memory_indexes.insert(index.id(), index_map);
+        for (index, index_map) in indexes.iter().zip(index_maps) {
+            self.in_memory_indexes
+                .insert(index.id().internal_id(), index_map);
+        }
         Ok((num_keys, total_size))
+    }
+
+    /// Insert enabled indexes for the given `tablet_id` with the provided,
+    /// already-fetched documents.
+    #[fastrace::trace]
+    pub fn load_table(
+        &mut self,
+        index_registry: &IndexRegistry,
+        tablet_id: TabletId,
+        documents: Vec<(Timestamp, PackedDocument)>,
+        snapshot_timestamp: Timestamp,
+        persistence_version: PersistenceVersion,
+    ) {
+        for index_doc in index_registry.enabled_indexes_for_table(tablet_id) {
+            let IndexConfig::Database {
+                spec,
+                on_disk_state,
+                ..
+            } = &index_doc.config
+            else {
+                continue;
+            };
+            assert_eq!(*on_disk_state, DatabaseIndexState::Enabled); // ensured by IndexRegistry
+            let mut index_map = DatabaseIndexMap::new_at(snapshot_timestamp);
+            for (ts, doc) in &documents {
+                let key = doc.index_key_owned(&spec.fields, persistence_version);
+                index_map.insert(key, *ts, doc.clone());
+            }
+            self.in_memory_indexes
+                .insert(index_doc.id().internal_id(), index_map);
+        }
     }
 
     pub fn update(
@@ -303,9 +374,37 @@ impl BackendInMemoryIndexes {
             .collect()
     }
 
+    pub fn range(
+        &self,
+        index_id: IndexId,
+        interval: &Interval,
+        order: Order,
+    ) -> anyhow::Result<Option<Vec<(IndexKeyBytes, Timestamp, MemoryDocument)>>> {
+        Ok(self
+            .in_memory_indexes
+            .get(&index_id)
+            .map(|index_map| order.apply(index_map.range(interval)).collect()))
+    }
+
     #[cfg(test)]
     pub(crate) fn in_memory_indexes(&self) -> OrdMap<IndexId, DatabaseIndexMap> {
         self.in_memory_indexes.clone()
+    }
+}
+
+/// Implementor of `InMemoryIndexes` if no indexes are available in-memory.
+pub struct NoInMemoryIndexes;
+#[async_trait]
+impl InMemoryIndexes for NoInMemoryIndexes {
+    async fn range(
+        &self,
+        _index_id: IndexId,
+        _interval: &Interval,
+        _order: Order,
+        _tablet_id: TabletId,
+        _table_name: TableName,
+    ) -> anyhow::Result<Option<Vec<(IndexKeyBytes, Timestamp, MemoryDocument)>>> {
+        Ok(None)
     }
 }
 
@@ -313,8 +412,7 @@ impl BackendInMemoryIndexes {
 struct IndexDocument {
     key: IndexKeyBytes,
     ts: Timestamp,
-    document: PackedDocument,
-    system_doc: SystemDocument,
+    document: MemoryDocument,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, derive_more::Deref)]
@@ -379,23 +477,21 @@ impl DatabaseIndexMap {
     fn range(
         &self,
         interval: &Interval,
-    ) -> impl DoubleEndedIterator<Item = (IndexKeyBytes, Timestamp, LazyDocument)> + '_ {
+    ) -> impl DoubleEndedIterator<Item = (IndexKeyBytes, Timestamp, MemoryDocument)> + '_ {
         let _s = static_span!();
-        self.inner.range(interval).map(|e| {
-            (
-                e.key.clone(),
-                e.ts,
-                LazyDocument::Packed(e.document.clone(), Some(e.system_doc.clone())),
-            )
-        })
+        self.inner
+            .range(interval)
+            .map(|e| (e.key.clone(), e.ts, e.document.clone()))
     }
 
     fn insert(&mut self, key: IndexKeyBytes, ts: Timestamp, document: PackedDocument) {
         self.inner.insert(ArcIndexDocument(Arc::new(IndexDocument {
             key,
             ts,
-            document,
-            system_doc: SystemDocument::new(),
+            document: MemoryDocument {
+                packed_document: document,
+                cached_system_document: SystemDocument::new(),
+            },
         })));
         self.last_modified = cmp::max(self.last_modified, ts);
     }
@@ -425,7 +521,7 @@ enum RangeFetchResult {
     /// This happens for tables that are statically configured to be kept in
     /// memory (e.g. `APP_TABLES_TO_LOAD_IN_MEMORY`).
     MemoryCached {
-        documents: Vec<(IndexKeyBytes, Timestamp, LazyDocument)>,
+        documents: Vec<(IndexKeyBytes, Timestamp, MemoryDocument)>,
         next_cursor: CursorPosition,
     },
     /// The range was against a non-memory table.
@@ -605,7 +701,16 @@ impl DatabaseIndexSnapshot {
                     Ok(RangeFetchResult::MemoryCached {
                         documents,
                         next_cursor,
-                    }) => (Ok((documents, next_cursor)), None),
+                    }) => (
+                        Ok((
+                            documents
+                                .into_iter()
+                                .map(|(key, ts, doc)| (key, ts, LazyDocument::Memory(doc)))
+                                .collect(),
+                            next_cursor,
+                        )),
+                        None,
+                    ),
                     Ok(RangeFetchResult::NonCached {
                         index_id,
                         cache_results,
@@ -692,7 +797,7 @@ impl DatabaseIndexSnapshot {
                 DatabaseIndexSnapshotCacheResult::Document(index_key, ts, document) => {
                     // Serve from cache.
                     log_transaction_cache_query(true);
-                    results.push((index_key, ts, LazyDocument::Packed(document, None)));
+                    results.push((index_key, ts, LazyDocument::Packed(document)));
                 },
                 DatabaseIndexSnapshotCacheResult::CacheMiss(interval) => {
                     log_transaction_cache_query(false);
@@ -1144,9 +1249,30 @@ pub struct RangeRequest {
 
 pub enum LazyDocument {
     Resolved(ResolvedDocument),
-    Packed(PackedDocument, Option<SystemDocument>),
+    Packed(PackedDocument),
+    Memory(MemoryDocument),
 }
 
+/// A system document fetched from an in-memory index. This is internally
+/// reference-counted and cheaply cloneable.
+#[derive(Clone, Debug)]
+pub struct MemoryDocument {
+    pub packed_document: PackedDocument,
+    pub cached_system_document: SystemDocument,
+}
+impl MemoryDocument {
+    /// Parse and return the document. The same document must not be parsed
+    /// twice with different types `T`.
+    pub fn force<T: Send + Sync + 'static>(&self) -> anyhow::Result<Arc<ParsedDocument<T>>>
+    where
+        for<'a> &'a PackedDocument: ParseDocument<T>,
+    {
+        self.cached_system_document.force(&self.packed_document)
+    }
+}
+
+/// Stores a lazily-populated, cached `ParsedDocument` of the right type for
+/// this system document.
 #[derive(Clone, Default, Debug)]
 pub struct SystemDocument(Arc<OnceLock<Arc<dyn Any + Send + Sync>>>);
 
@@ -1195,7 +1321,8 @@ impl LazyDocument {
     pub fn unpack(self) -> ResolvedDocument {
         match self {
             LazyDocument::Resolved(doc) => doc,
-            LazyDocument::Packed(doc, _) => doc.unpack(),
+            LazyDocument::Packed(doc) => doc.unpack(),
+            LazyDocument::Memory(doc) => doc.packed_document.unpack(),
         }
     }
 
@@ -1204,7 +1331,8 @@ impl LazyDocument {
             LazyDocument::Resolved(doc) => doc.size(),
             // This is the size of the PackedValue representation, not the
             // proper size of the ConvexValue
-            LazyDocument::Packed(doc, ..) => doc.value().size(),
+            LazyDocument::Packed(doc) => doc.value().size(),
+            LazyDocument::Memory(doc) => doc.packed_document.value().size(),
         }
     }
 }

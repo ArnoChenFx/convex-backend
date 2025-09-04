@@ -366,12 +366,17 @@ impl<RT: Runtime> ScheduledJobExecutor<RT> {
                 BTreeMap::new(),
             );
             let sentry_hub = sentry::Hub::with(|hub| sentry::Hub::new_from_top(hub));
-            // TODO: cancel this handle with the application
             self.context.rt.spawn_background(
                 "spawn_scheduled_job",
                 async move {
-                    context.execute_job(job, job_id).await;
-                    let _ = tx.send(job_id).await;
+                    select_biased! {
+                        _ = tx.closed().fuse() => {
+                            tracing::error!("Scheduled job receiver closed");
+                        },
+                        _ = context.execute_job(job, job_id).fuse() => {
+                            let _ = tx.send(job_id).await;
+                        },
+                    }
                 }
                 .in_span(root)
                 .bind_hub(sentry_hub),
@@ -786,7 +791,7 @@ impl<RT: Runtime> ScheduledJobContext<RT> {
                 let mut updated_job = job.clone();
                 updated_job.state = ScheduledJobState::InProgress {
                     request_id: Some(context.request_id.clone()),
-                    execution_id: Some(context.execution_id.clone()),
+                    execution_id: Some(context.execution_id),
                 };
                 SchedulerModel::new(&mut tx, namespace)
                     .replace(job_id, updated_job.clone())
@@ -849,7 +854,7 @@ impl<RT: Runtime> ScheduledJobContext<RT> {
                 // Restore the request & execution ID of the failed execution.
                 let context = ExecutionContext::new_from_parts(
                     request_id.clone().unwrap_or_else(RequestId::new),
-                    execution_id.clone().unwrap_or_else(ExecutionId::new),
+                    (*execution_id).unwrap_or_else(ExecutionId::new),
                     caller.parent_scheduled_job(),
                     caller.is_root(),
                 );

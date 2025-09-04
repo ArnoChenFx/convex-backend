@@ -45,8 +45,12 @@ export const stackTraceUsedByProxyAgents = action(() => {
 
 async function wontBeInTheStackTrace(): Promise<string> {
   return await new Promise((resolve) => {
-    http.get("http://example.com", () => {
+    http.get("http://convex.dev", () => {
       resolve(new Error().stack || "");
     });
   });
 }
+
+export const errorWithMessage = action(() => {
+  return new Error("custom error message").stack;
+});

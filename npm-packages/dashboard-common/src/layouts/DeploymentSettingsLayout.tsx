@@ -44,7 +44,7 @@ export function DeploymentSettingsLayout({
         {/* Make space for the header above */}
         <div className="flex h-full w-full overflow-y-hidden">
           {isWide && sidebar}
-          <div className="flex w-full min-w-[22rem] grow overflow-auto scrollbar">
+          <div className="scrollbar flex w-full min-w-[22rem] grow overflow-auto">
             <div className="flex h-fit grow flex-col gap-6 p-6 sm:max-w-[65rem]">
               {children}
             </div>
@@ -114,7 +114,7 @@ function DeploymentSettingsText() {
       }
       return <>Preview Deployment Settings</>;
     default: {
-      const _typecheck: never = deployment.deploymentType;
+      deployment.deploymentType satisfies never;
       throw new Error("Unknown deployment type");
     }
   }

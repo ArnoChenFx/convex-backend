@@ -2,7 +2,7 @@ import { Menu, MenuLink } from "@ui/Menu";
 import { Tooltip } from "@ui/Tooltip";
 import { ToggleTheme } from "@common/elements/ToggleTheme";
 import { GearIcon, PersonIcon, ExitIcon } from "@radix-ui/react-icons";
-import { useAuth0 } from "hooks/useAuth0";
+import { useWorkOS } from "hooks/useWorkOS";
 import Image from "next/image";
 import { useCurrentTeam } from "api/teams";
 import { useCurrentProject } from "api/projects";
@@ -10,7 +10,7 @@ import { useProfile } from "api/profile";
 import { useRouter } from "next/router";
 
 export function UserMenu() {
-  const { user } = useAuth0();
+  const { user } = useWorkOS();
   const profile = useProfile();
   const team = useCurrentTeam();
   const project = useCurrentProject();
@@ -19,9 +19,9 @@ export function UserMenu() {
   return (
     <Menu
       buttonProps={{
-        icon: user?.picture ? (
+        icon: user?.profilePictureUrl ? (
           <Image
-            src={user.picture}
+            src={user.profilePictureUrl}
             priority
             alt="User profile image"
             width={32}
@@ -39,7 +39,7 @@ export function UserMenu() {
       placement="bottom-end"
     >
       {profile ? (
-        <div className="flex min-w-[20rem] max-w-[20rem] flex-col gap-1 border-b px-3 pb-2">
+        <div className="flex max-w-[20rem] min-w-[20rem] flex-col gap-1 border-b px-3 pb-2">
           {profile.name && (
             <div className="text-sm font-semibold text-content-primary">
               {profile.name}
@@ -76,7 +76,7 @@ export function UserMenu() {
             tip="Settings related to your team (e.g. billing, usage, and inviting team members)."
           >
             <MenuLink href="/team/settings" disabled={isAcceptingOptions}>
-              <div className="flex w-full items-center justify-between">
+              <div className="flex w-full items-center justify-between gap-1">
                 Team Settings
                 <span className="max-w-[6rem] truncate text-xs text-content-secondary">
                   {team.name}

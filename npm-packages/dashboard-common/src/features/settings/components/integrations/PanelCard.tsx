@@ -122,7 +122,7 @@ function exportSetupLink(kind: ExportIntegrationType): string {
     case "fivetran":
       return "https://fivetran.com/integrations/convex";
     default: {
-      const _typeCheck: never = kind;
+      kind satisfies never;
       return "";
     }
   }
@@ -178,7 +178,7 @@ function renderModal(
       return (
         <Modal onClose={closeModal} title="Configure Sentry">
           <div className="flex flex-col gap-4">
-            <div className="max-w-prose text-pretty text-xs text-content-secondary">
+            <div className="max-w-prose text-xs text-pretty text-content-secondary">
               Configure your Convex deployment to route function execution
               exceptions to Sentry for visibility.
             </div>
@@ -190,7 +190,7 @@ function renderModal(
         </Modal>
       );
     default: {
-      const _typeCheck: never = integration;
+      integration satisfies never;
       return null;
     }
   }
@@ -210,7 +210,7 @@ function LogIntegrationModal({
   return (
     <Modal onClose={closeModal} title={title}>
       <div className="flex flex-col gap-4">
-        <div className="max-w-prose text-pretty text-xs text-content-secondary">
+        <div className="max-w-prose text-xs text-pretty text-content-secondary">
           {description}
         </div>
         {children}

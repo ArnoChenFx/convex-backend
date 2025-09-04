@@ -1,4 +1,5 @@
-import { Context, logVerbose, logWarning } from "../../bundler/context.js";
+import { Context } from "../../bundler/context.js";
+import { logVerbose, logWarning } from "../../bundler/log.js";
 import { getTeamAndProjectFromPreviewAdminKey } from "./deployment.js";
 import {
   assertLocalBackendRunning,
@@ -23,7 +24,7 @@ export type AccountRequiredDeploymentType = CloudDeploymentType | "local";
 export type DeploymentType = AccountRequiredDeploymentType | "anonymous";
 
 export type Project = {
-  id: string;
+  id: number;
   name: string;
   slug: string;
   isDemo: boolean;
@@ -37,12 +38,10 @@ export async function createProject(
   {
     teamSlug: selectedTeamSlug,
     projectName,
-    partitionId,
     deploymentTypeToProvision,
   }: {
     teamSlug: string;
     projectName: string;
-    partitionId?: number;
     deploymentTypeToProvision: "prod" | "dev";
   },
 ): Promise<{
@@ -56,7 +55,6 @@ export async function createProject(
     // TODO: Consider allowing projects with no deployments, or consider switching
     // to provisioning prod on creation.
     deploymentType: deploymentTypeToProvision,
-    partitionId,
   };
   const data = await bigBrainAPI({
     ctx,
@@ -95,12 +93,9 @@ export const deploymentSelectionWithinProjectSchema = z.discriminatedUnion(
   [
     z.object({ kind: z.literal("previewName"), previewName: z.string() }),
     z.object({ kind: z.literal("deploymentName"), deploymentName: z.string() }),
-    z.object({ kind: z.literal("prod"), partitionId: z.number().optional() }),
-    z.object({
-      kind: z.literal("implicitProd"),
-      partitionId: z.number().optional(),
-    }),
-    z.object({ kind: z.literal("ownDev"), partitionId: z.number().optional() }),
+    z.object({ kind: z.literal("prod") }),
+    z.object({ kind: z.literal("implicitProd") }),
+    z.object({ kind: z.literal("ownDev") }),
   ],
 );
 
@@ -116,7 +111,6 @@ type DeploymentSelectionOptionsWithinProject = {
 
   previewName?: string | undefined;
   deploymentName?: string | undefined;
-  partitionId?: string | undefined;
 };
 
 export type DeploymentSelectionOptions =
@@ -126,26 +120,22 @@ export type DeploymentSelectionOptions =
     envFile?: string | undefined;
   };
 
-export async function deploymentSelectionWithinProjectFromOptions(
-  ctx: Context,
+export function deploymentSelectionWithinProjectFromOptions(
   options: DeploymentSelectionOptions,
-): Promise<DeploymentSelectionWithinProject> {
+): DeploymentSelectionWithinProject {
   if (options.previewName !== undefined) {
     return { kind: "previewName", previewName: options.previewName };
   }
   if (options.deploymentName !== undefined) {
     return { kind: "deploymentName", deploymentName: options.deploymentName };
   }
-  const partitionId = options.partitionId
-    ? parseInt(options.partitionId)
-    : undefined;
   if (options.prod) {
-    return { kind: "prod", partitionId };
+    return { kind: "prod" };
   }
   if (options.implicitProd) {
-    return { kind: "implicitProd", partitionId };
+    return { kind: "implicitProd" };
   }
-  return { kind: "ownDev", partitionId };
+  return { kind: "ownDev" };
 }
 
 export async function validateDeploymentSelectionForExistingDeployment(
@@ -170,13 +160,11 @@ export async function validateDeploymentSelectionForExistingDeployment(
       });
     case "deployKey":
       logWarning(
-        ctx,
         "Ignoring `--prod`, `--preview-name`, or `--deployment-name` flags and using deployment from CONVEX_DEPLOY_KEY",
       );
       break;
     case "cliArgs":
       logWarning(
-        ctx,
         "Ignoring `--prod`, `--preview-name`, or `--deployment-name` flags since this command was run with --url and --admin-key",
       );
       break;
@@ -194,7 +182,7 @@ async function hasAccessToProject(
   try {
     await bigBrainAPIMaybeThrows({
       ctx,
-      url: `/api/teams/${selector.teamSlug}/projects/${selector.projectSlug}/deployments`,
+      url: `teams/${selector.teamSlug}/projects/${selector.projectSlug}/deployments`,
       method: "GET",
     });
     return true;
@@ -251,7 +239,7 @@ export async function checkAccessToSelectedProject(
       // it will instead fail as soon as we try to use the key.
       return { kind: "unknown" };
     default: {
-      const _exhaustivenessCheck: never = projectSelection;
+      projectSelection satisfies never;
       return await ctx.crash({
         exitCode: 1,
         errorType: "fatal",
@@ -268,7 +256,7 @@ async function getTeamAndProjectSlugForDeployment(
   try {
     const body = await bigBrainAPIMaybeThrows({
       ctx,
-      url: `/api/deployment/${selector.deploymentName}/team_and_project`,
+      url: `deployment/${selector.deploymentName}/team_and_project`,
       method: "GET",
     });
     return { teamSlug: body.team, projectSlug: body.project };
@@ -295,7 +283,6 @@ export async function fetchDeploymentCredentialsProvisioningDevOrProdMaybeThrows
     | { kind: "teamAndProjectSlugs"; teamSlug: string; projectSlug: string }
     | { kind: "projectDeployKey"; projectDeployKey: string },
   deploymentType: "prod" | "dev",
-  partitionId: number | undefined,
 ): Promise<{
   deploymentName: string;
   deploymentUrl: string;
@@ -334,7 +321,6 @@ export async function fetchDeploymentCredentialsProvisioningDevOrProdMaybeThrows
             ? projectSelection.projectSlug
             : null,
         deploymentType: deploymentType === "prod" ? "prod" : "dev",
-        partitionId,
       },
     });
   } catch (error) {
@@ -380,7 +366,6 @@ async function fetchExistingDevDeploymentCredentialsOrCrash(
         projectSlug: slugs.project,
       },
       "dev",
-      undefined,
     );
   return {
     deploymentName: credentials.deploymentName,
@@ -397,7 +382,6 @@ async function fetchExistingDevDeploymentCredentialsOrCrash(
 async function handleOwnDev(
   ctx: Context,
   projectSelection: ProjectSelection,
-  partitionId: number | undefined,
 ): Promise<{
   deploymentName: string;
   adminKey: string;
@@ -431,7 +415,6 @@ async function handleOwnDev(
           ctx,
           projectSelection,
           "dev",
-          partitionId,
         );
       return {
         url: credentials.deploymentUrl,
@@ -441,7 +424,7 @@ async function handleOwnDev(
       };
     }
     default: {
-      const _exhaustivenessCheck: never = projectSelection;
+      projectSelection satisfies never;
       return ctx.crash({
         exitCode: 1,
         errorType: "fatal",
@@ -456,7 +439,6 @@ async function handleOwnDev(
 async function handleProd(
   ctx: Context,
   projectSelection: ProjectSelection,
-  partitionId: number | undefined,
 ): Promise<{
   deploymentName: string;
   adminKey: string;
@@ -471,7 +453,6 @@ async function handleProd(
         url: "deployment/authorize_prod",
         data: {
           deploymentName: projectSelection.deploymentName,
-          partitionId: partitionId,
         },
       });
       return credentials;
@@ -483,7 +464,6 @@ async function handleProd(
           ctx,
           projectSelection,
           "prod",
-          partitionId,
         );
       return {
         url: credentials.deploymentUrl,
@@ -574,19 +554,11 @@ async function fetchDeploymentCredentialsWithinCurrentProject(
 }> {
   switch (deploymentSelection.kind) {
     case "ownDev": {
-      return await handleOwnDev(
-        ctx,
-        projectSelection,
-        deploymentSelection.partitionId,
-      );
+      return await handleOwnDev(ctx, projectSelection);
     }
     case "implicitProd":
     case "prod": {
-      return await handleProd(
-        ctx,
-        projectSelection,
-        deploymentSelection.partitionId,
-      );
+      return await handleProd(ctx, projectSelection);
     }
     case "previewName":
       return await handlePreview(
@@ -601,7 +573,7 @@ async function fetchDeploymentCredentialsWithinCurrentProject(
         projectSelection,
       );
     default: {
-      const _exhaustivenessCheck: never = deploymentSelection;
+      deploymentSelection satisfies never;
       return ctx.crash({
         exitCode: 1,
         errorType: "fatal",
@@ -643,7 +615,6 @@ async function _loadExistingDeploymentCredentialsForProject(
     deploymentSelection,
   );
   logVerbose(
-    ctx,
     `Deployment URL: ${result.url}, Deployment Name: ${result.deploymentName}, Deployment Type: ${result.deploymentType}`,
   );
   if (ensureLocalRunning && result.deploymentType === "local") {
@@ -665,15 +636,8 @@ async function _loadExistingDeploymentCredentialsForProject(
     },
   };
 }
-// This is used by most commands (notably not `dev` and `deploy`) to determine
-// which deployment to act on, taking into account the deployment selection flags.
-//
-export async function loadSelectedDeploymentCredentials(
-  ctx: Context,
-  deploymentSelection: DeploymentSelection,
-  selectionWithinProject: DeploymentSelectionWithinProject,
-  { ensureLocalRunning } = { ensureLocalRunning: true },
-): Promise<{
+
+export type DetailedDeploymentCredentials = {
   adminKey: string;
   url: string;
   deploymentFields: {
@@ -682,7 +646,17 @@ export async function loadSelectedDeploymentCredentials(
     projectSlug: string | null;
     teamSlug: string | null;
   } | null;
-}> {
+};
+
+// This is used by most commands (notably not `dev` and `deploy`) to determine
+// which deployment to act on, taking into account the deployment selection flags.
+//
+export async function loadSelectedDeploymentCredentials(
+  ctx: Context,
+  deploymentSelection: DeploymentSelection,
+  selectionWithinProject: DeploymentSelectionWithinProject,
+  { ensureLocalRunning } = { ensureLocalRunning: true },
+): Promise<DetailedDeploymentCredentials> {
   switch (deploymentSelection.kind) {
     case "existingDeployment":
       await validateDeploymentSelectionForExistingDeployment(
@@ -692,7 +666,6 @@ export async function loadSelectedDeploymentCredentials(
       );
       // We're already set up.
       logVerbose(
-        ctx,
         `Deployment URL: ${deploymentSelection.deploymentToActOn.url}, Deployment Name: ${deploymentSelection.deploymentToActOn.deploymentFields?.deploymentName ?? "unknown"}, Deployment Type: ${deploymentSelection.deploymentToActOn.deploymentFields?.deploymentType ?? "unknown"}`,
       );
       return {
@@ -764,7 +737,7 @@ export async function loadSelectedDeploymentCredentials(
       };
     }
     default: {
-      const _exhaustivenessCheck: never = deploymentSelection;
+      deploymentSelection satisfies never;
       return await ctx.crash({
         exitCode: 1,
         errorType: "fatal",

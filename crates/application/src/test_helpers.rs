@@ -30,7 +30,10 @@ use common::{
         UDF_CACHE_MAX_SIZE,
     },
     persistence::Persistence,
-    runtime::Runtime,
+    runtime::{
+        new_unlimited_rate_limiter,
+        Runtime,
+    },
     shutdown::ShutdownSignal,
     testing::TestPersistence,
     types::{
@@ -48,6 +51,7 @@ use events::usage::{
     NoOpUsageEventLogger,
     UsageEventLogger,
 };
+use exports::interface::InProcessExportProvider;
 use file_storage::{
     FileStorage,
     TransactionalFileStorage,
@@ -200,6 +204,8 @@ impl<RT: Runtime> ApplicationTestExt<RT> for Application<RT> {
             ShutdownSignal::panic(),
             virtual_system_mapping().clone(),
             args.event_logger.unwrap_or(Arc::new(NoOpUsageEventLogger)),
+            // Essentially unlimited rate limit for testing
+            Arc::new(new_unlimited_rate_limiter(rt.clone())),
         )
         .await?;
         initialize_application_system_tables(&database).await?;
@@ -274,6 +280,7 @@ impl<RT: Runtime> ApplicationTestExt<RT> for Application<RT> {
             fetch_client,
             None, // local_log_sink
             ShutdownSignal::panic(),
+            Arc::new(InProcessExportProvider),
         )
         .await?;
 
@@ -402,7 +409,7 @@ impl<RT: Runtime> ApplicationTestExt<RT> for Application<RT> {
 }
 
 impl<RT: Runtime> Application<RT> {
-    fn load_start_push_request(layout_path: &Path) -> anyhow::Result<StartPushRequest> {
+    pub fn load_start_push_request(layout_path: &Path) -> anyhow::Result<StartPushRequest> {
         let path = Path::new(OUT_DIR)
             .join(layout_path)
             .join("start_push_request.json");
@@ -422,7 +429,7 @@ impl<RT: Runtime> Application<RT> {
         let mut tx = self.begin(Identity::system()).await?;
         let udf_config = UdfConfig::new_for_test(&self.runtime(), "1000.0.0".parse()?);
         // TODO(rakeeb): add external packages to udf test modules
-        let source_package = self.upload_package(&test_source, None).await?;
+        let source_package = self.upload_package(&test_source, None, None).await?;
         let analyze_results = self
             .analyze(
                 udf_config.clone(),

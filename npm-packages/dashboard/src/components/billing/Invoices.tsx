@@ -30,7 +30,7 @@ export function Invoices({ invoices }: { invoices: InvoiceResponse[] }) {
 
 function InvoicesTable({ invoices }: { invoices: InvoiceResponse[] }) {
   return (
-    <div className="max-h-[30rem] overflow-y-auto rounded-sm border scrollbar">
+    <div className="scrollbar max-h-[30rem] overflow-y-auto rounded-sm border">
       <table className="w-full">
         <thead className="sticky top-0 z-10 border-b bg-background-secondary">
           <tr>
@@ -55,9 +55,7 @@ function InvoicesTable({ invoices }: { invoices: InvoiceResponse[] }) {
                 {new Date(invoice.invoiceDate).toLocaleDateString()}
               </td>
               <td className="py-2 text-sm">
-                <StatusPill
-                  status={invoice.hasFailedPayment ? "failed" : invoice.status}
-                />
+                <StatusPill status={invoice.status} />
               </td>
               <td className="py-2 text-sm">
                 {parseFloat(invoice.total).toLocaleString("en-US", {

@@ -9,8 +9,8 @@ import open from "open";
 import chalk from "chalk";
 import { provisionHost } from "./config.js";
 import { version } from "../version.js";
+import { Context } from "../../bundler/context.js";
 import {
-  Context,
   changeSpinner,
   logError,
   logFailure,
@@ -19,7 +19,7 @@ import {
   logOutput,
   logVerbose,
   showSpinner,
-} from "../../bundler/context.js";
+} from "../../bundler/log.js";
 import { Issuer } from "openid-client";
 import { hostname } from "os";
 import { execSync } from "child_process";
@@ -30,12 +30,6 @@ import {
   modifyGlobalConfig,
 } from "./utils/globalConfig.js";
 import { updateBigBrainAuthAfterLogin } from "./deploymentSelection.js";
-
-const SCOPE = "openid email profile";
-/// This value was created long ago, and cannot be changed easily.
-/// It's just a fixed string used for identifying the Auth0 token, so it's fine
-/// and not user-facing.
-const AUDIENCE = "https://console.convex.dev/api/";
 
 // Per https://github.com/panva/node-openid-client/tree/main/docs#customizing
 custom.setHttpOptionsDefaults({
@@ -73,7 +67,6 @@ export async function checkAuthorization(
   } catch (e: any) {
     // This `catch` block should only be hit if a network error was encountered
     logError(
-      ctx,
       `Unexpected error when authorizing - are you connected to the internet?`,
     );
     return await logAndHandleFetchError(ctx, e);
@@ -93,7 +86,7 @@ export async function checkAuthorization(
 
 async function performDeviceAuthorization(
   ctx: Context,
-  auth0Client: BaseClient,
+  authClient: BaseClient,
   shouldOpen: boolean,
 ): Promise<string> {
   // Device authorization flow follows this guide: https://github.com/auth0/auth0-device-flow-cli-sample/blob/9f0f3b76a6cd56ea8d99e76769187ea5102d519d/cli.js
@@ -127,12 +120,9 @@ async function performDeviceAuthorization(
   // Get authentication URL
   let handle;
   try {
-    handle = await auth0Client.deviceAuthorization({
-      scope: SCOPE,
-      audience: AUDIENCE,
-    });
+    handle = await authClient.deviceAuthorization();
   } catch {
-    // We couldn't get verification URL from Auth0, proceed with manual auth
+    // We couldn't get verification URL from the auth provider, proceed with manual auth
     return promptString(ctx, {
       message:
         "Open https://dashboard.convex.dev/auth, log in and paste the token here:",
@@ -143,7 +133,6 @@ async function performDeviceAuthorization(
   // Open authentication URL
   const { verification_uri_complete, user_code, expires_in } = handle;
   logMessage(
-    ctx,
     `Visit ${verification_uri_complete} to finish logging in.\n` +
       `You should see the following code which expires in ${
         expires_in % 60 === 0
@@ -160,30 +149,24 @@ async function performDeviceAuthorization(
 
   if (shouldOpen) {
     showSpinner(
-      ctx,
       `Opening ${verification_uri_complete} in your browser to log in...\n`,
     );
     try {
       const p = await open(verification_uri_complete);
       p.once("error", () => {
         changeSpinner(
-          ctx,
           `Manually open ${verification_uri_complete} in your browser to log in.`,
         );
       });
-      changeSpinner(ctx, "Waiting for the confirmation...");
+      changeSpinner("Waiting for the confirmation...");
     } catch {
-      logError(ctx, chalk.red(`Unable to open browser.`));
+      logError(chalk.red(`Unable to open browser.`));
       changeSpinner(
-        ctx,
         `Manually open ${verification_uri_complete} in your browser to log in.`,
       );
     }
   } else {
-    showSpinner(
-      ctx,
-      `Open ${verification_uri_complete} in your browser to log in.`,
-    );
+    showSpinner(`Open ${verification_uri_complete} in your browser to log in.`);
   }
 
   // Device Access Token Request - https://tools.ietf.org/html/rfc8628#section-3.4
@@ -231,29 +214,34 @@ async function performDeviceAuthorization(
 
 async function performPasswordAuthentication(
   ctx: Context,
-  issuer: string,
   clientId: string,
   username: string,
   password: string,
 ): Promise<string> {
+  if (!process.env.WORKOS_API_SECRET) {
+    return await ctx.crash({
+      exitCode: 1,
+      errorType: "fatal",
+      printedMessage: "WORKOS_API_SECRET environment variable is not set",
+    });
+  }
+
   // Unfortunately, `openid-client` doesn't support the resource owner password credentials flow so we need to manually send the requests.
   const options: Parameters<typeof throwingFetch>[1] = {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
       grant_type: "password",
-      username: username,
+      email: username,
       password: password,
-      scope: SCOPE,
       client_id: clientId,
-      audience: AUDIENCE,
-      // Note that there is no client secret provided, as Auth0 refuses to require it for untrusted apps.
+      client_secret: process.env.WORKOS_API_SECRET,
     }),
   };
 
   try {
     const response = await throwingFetch(
-      new URL("/oauth/token", issuer).href,
+      "https://apiauth.convex.dev/user_management/authenticate",
       options,
     );
     const data = await response.json();
@@ -265,9 +253,9 @@ async function performPasswordAuthentication(
       throw Error("Access token is missing");
     }
   } catch (err: any) {
-    logFailure(ctx, `Password flow failed: ${err}`);
+    logFailure(`Password flow failed: ${err}`);
     if (err.response) {
-      logError(ctx, chalk.red(`${JSON.stringify(err.response.data)}`));
+      logError(chalk.red(`${JSON.stringify(err.response.data)}`));
     }
     return await ctx.crash({
       exitCode: 1,
@@ -325,7 +313,6 @@ export async function performLogin(
   }
   if (!deviceNameOverride) {
     logMessage(
-      ctx,
       chalk.bold(`Welcome to developing with Convex, let's get you logged in.`),
     );
     deviceName = await promptString(ctx, {
@@ -335,7 +322,7 @@ export async function performLogin(
   }
 
   const issuer = overrideAuthUrl ?? "https://auth.convex.dev";
-  let auth0;
+  let authIssuer;
   let accessToken: string;
 
   if (loginFlow === "paste" || (loginFlow === "auto" && isWebContainer())) {
@@ -345,7 +332,7 @@ export async function performLogin(
     });
   } else {
     try {
-      auth0 = await Issuer.discover(issuer);
+      authIssuer = await Issuer.discover(issuer);
     } catch {
       // Couldn't contact https://auth.convex.dev/.well-known/openid-configuration,
       // proceed with manual auth.
@@ -357,9 +344,9 @@ export async function performLogin(
   }
 
   // typical path
-  if (auth0) {
+  if (authIssuer) {
     const clientId = overrideAuthClient ?? "HFtA247jp9iNs08NTLIB7JsNPMmRIyfi";
-    const auth0Client = new auth0.Client({
+    const authClient = new authIssuer.Client({
       client_id: clientId,
       token_endpoint_auth_method: "none",
       id_token_signed_response_alg: "RS256",
@@ -370,7 +357,6 @@ export async function performLogin(
     } else if (overrideAuthUsername && overrideAuthPassword) {
       accessToken = await performPasswordAuthentication(
         ctx,
-        issuer,
         clientId,
         overrideAuthUsername,
         overrideAuthPassword,
@@ -378,14 +364,14 @@ export async function performLogin(
     } else {
       accessToken = await performDeviceAuthorization(
         ctx,
-        auth0Client,
+        authClient,
         open ?? true,
       );
     }
   }
 
   if (dumpAccessToken) {
-    logOutput(ctx, `${accessToken!}`);
+    logOutput(`${accessToken!}`);
     return await ctx.crash({
       exitCode: 0,
       errorType: "fatal",
@@ -408,7 +394,7 @@ export async function performLogin(
   try {
     await modifyGlobalConfig(ctx, globalConfig);
     const path = globalConfigPath();
-    logFinishedStep(ctx, `Saved credentials to ${formatPathForPrinting(path)}`);
+    logFinishedStep(`Saved credentials to ${formatPathForPrinting(path)}`);
   } catch (err: unknown) {
     return await ctx.crash({
       exitCode: 1,
@@ -418,13 +404,10 @@ export async function performLogin(
     });
   }
 
-  logVerbose(ctx, `performLogin: updating big brain auth after login`);
+  logVerbose(`performLogin: updating big brain auth after login`);
   await updateBigBrainAuthAfterLogin(ctx, data.accessToken);
 
-  logVerbose(
-    ctx,
-    `performLogin: checking opt ins, acceptOptIns: ${acceptOptIns}`,
-  );
+  logVerbose(`performLogin: checking opt ins, acceptOptIns: ${acceptOptIns}`);
   // Do opt in to TOS and Privacy Policy stuff
   const shouldContinue = await optins(ctx, acceptOptIns ?? false);
   if (!shouldContinue) {
@@ -458,12 +441,13 @@ async function optins(ctx: Context, acceptOptIns: boolean): Promise<boolean> {
   switch (bbAuth.kind) {
     case "accessToken":
       break;
+    case "deploymentKey":
     case "projectKey":
     case "previewDeployKey":
       // If we have a key configured as auth, we do not need to check opt ins.
       return true;
     default: {
-      const _exhaustivenessCheck: never = bbAuth;
+      bbAuth satisfies never;
       return await ctx.crash({
         exitCode: 1,
         errorType: "fatal",
@@ -487,7 +471,7 @@ async function optins(ctx: Context, acceptOptIns: boolean): Promise<boolean> {
         message: optInToAccept.message,
       }));
     if (!confirmed) {
-      logFailure(ctx, "Please accept the Terms of Service to use Convex.");
+      logFailure("Please accept the Terms of Service to use Convex.");
       return Promise.resolve(false);
     }
   }
@@ -496,6 +480,17 @@ async function optins(ctx: Context, acceptOptIns: boolean): Promise<boolean> {
   const args: AcceptOptInsArgs = { optInsAccepted };
   await bigBrainAPI({ ctx, method: "POST", url: "accept_opt_ins", data: args });
   return true;
+}
+
+export async function getTeamsForUser(ctx: Context) {
+  const teams = await bigBrainAPI<{ id: number; name: string; slug: string }[]>(
+    {
+      ctx,
+      method: "GET",
+      url: "teams",
+    },
+  );
+  return teams;
 }
 
 export async function ensureLoggedIn(
@@ -511,7 +506,7 @@ export async function ensureLoggedIn(
   const isLoggedIn = await checkAuthorization(ctx, false);
   if (!isLoggedIn) {
     if (options?.message) {
-      logMessage(ctx, options.message);
+      logMessage(options.message);
     }
     await performLogin(ctx, {
       acceptOptIns: false,

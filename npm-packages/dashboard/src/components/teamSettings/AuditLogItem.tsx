@@ -561,9 +561,23 @@ function EntryAction({
         </>
       );
     }
+    case "verifyOAuthApplication": {
+      return <span>verified an OAuth application</span>;
+    }
+    case "deleteOAuthApplication": {
+      return <span>deleted an OAuth application</span>;
+    }
+    case "createOAuthApplication": {
+      return <span>created an OAuth application</span>;
+    }
+    case "updateOAuthApplication": {
+      return <span>updated an OAuth application</span>;
+    }
+    case "generateOAuthClientSecret": {
+      return <span>generated a client secret for an OAuth application</span>;
+    }
     default:
-      // eslint-disable-next-line no-case-declarations, @typescript-eslint/no-unused-vars
-      const notAllowed: never = action;
+      action satisfies never;
       captureMessage(`Unhandled audit log action: ${action}`);
       return <UnhandledAction action={action} />;
   }
@@ -793,8 +807,8 @@ function DeploymentSettingsLink({
   const project = projects.find((p) => p.id === deployment.projectId);
   if (!project) {
     captureMessage(
-      `Malformed deploy key audit log entry: 
-      deployment ${deploymentId} has project id ${deployment.projectId} 
+      `Malformed deploy key audit log entry:
+      deployment ${deploymentId} has project id ${deployment.projectId}
       which is not found within the projects of team ${team.id}`,
     );
     return <span>a deployment</span>;
@@ -928,7 +942,7 @@ function SpendingLimitLine({
 
 function SpendingValue({ valueCents }: { valueCents: number | null }) {
   return (
-    <div className="text-right font-medium tabular-nums text-content-primary">
+    <div className="text-right font-medium text-content-primary tabular-nums">
       {valueCents === null ? "None" : formatUsd(valueCents / 100)}
     </div>
   );

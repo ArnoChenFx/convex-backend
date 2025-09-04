@@ -5,6 +5,7 @@ import {
   captureMessage,
   addBreadcrumb,
   ErrorBoundary,
+  FallbackRender,
 } from "@sentry/nextjs";
 import { reportHttpError } from "hooks/fetching";
 import {
@@ -24,14 +25,21 @@ import { Fallback } from "pages/500";
 import { useTeamUsageState } from "api/usage";
 import { useProjectEnvironmentVariables } from "api/environmentVariables";
 import { useCurrentProject } from "api/projects";
-import { useLaunchDarkly } from "hooks/useLaunchDarkly";
 
 // A silly, standard hack to dodge warnings about useLayoutEffect on the server.
 const useIsomorphicLayoutEffect =
   typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
-function DeploymentErrorBoundary({ children }: { children: React.ReactNode }) {
-  return <ErrorBoundary fallback={Fallback}>{children}</ErrorBoundary>;
+function DeploymentErrorBoundary({
+  children,
+  fallback,
+}: {
+  children: React.ReactNode;
+  fallback?: React.ReactElement | FallbackRender;
+}) {
+  return (
+    <ErrorBoundary fallback={fallback ?? Fallback}>{children}</ErrorBoundary>
+  );
 }
 
 export function DeploymentInfoProvider({
@@ -53,9 +61,9 @@ export function DeploymentInfoProvider({
   const teamsURI = `/t/${selectedTeamSlug}`;
   const projectsURI = `${teamsURI}/${projectSlug}`;
   const deploymentsURI = `${projectsURI}/${deploymentName}`;
-  const { enableIndexFilters } = useLaunchDarkly();
   useIsomorphicLayoutEffect(() => {
     const f = async () => {
+      setDeploymentInfo(undefined);
       const info = await deploymentAuth(
         deploymentOverride || (deploymentName as string),
         `Bearer ${accessToken}`,
@@ -84,7 +92,6 @@ export function DeploymentInfoProvider({
         projectsURI,
         deploymentsURI,
         isSelfHosted: false,
-        enableIndexFilters,
       });
     };
     if (accessToken && (deploymentOverride || deploymentName)) {
@@ -95,7 +102,6 @@ export function DeploymentInfoProvider({
     deploymentName,
     deploymentOverride,
     deploymentsURI,
-    enableIndexFilters,
     projectsURI,
     teamsURI,
   ]);

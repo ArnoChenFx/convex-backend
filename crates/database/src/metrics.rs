@@ -15,6 +15,7 @@ use metrics::{
     log_distribution,
     log_distribution_with_labels,
     register_convex_counter,
+    register_convex_gauge,
     register_convex_histogram,
     IntoLabel,
     StaticMetricLabel,
@@ -57,6 +58,20 @@ pub fn log_num_indexes_to_backfill(num_indexes: usize) {
 register_convex_counter!(INDEXES_BACKFILLED_TOTAL, "Number of indexes backfilled");
 pub fn log_index_backfilled() {
     log_counter(&INDEXES_BACKFILLED_TOTAL, 1);
+}
+
+register_convex_histogram!(
+    DB_INDEX_BACKFILL_SECONDS,
+    "Time for database indexes to backfill",
+    &STATUS_LABEL
+);
+
+register_convex_histogram!(
+    TABLET_DB_INDEX_BACKFILL_SECONDS,
+    "Time for database indexes to backfill",
+);
+pub fn tablet_index_backfill_timer() -> Timer<VMHistogram> {
+    Timer::new(&TABLET_DB_INDEX_BACKFILL_SECONDS)
 }
 
 register_convex_histogram!(
@@ -247,10 +262,11 @@ pub fn commit_is_stale_timer() -> StatusTimer {
 }
 
 register_convex_counter!(
-    DATABASE_MISSING_INDEX_KEY_TOTAL,
-    "Number of times an index was not found in DocumentIndexKeys"
+    DATABASE_MISSING_INDEX_KEY_STALENESS_TOTAL,
+    "Number of times a database index was not found in DocumentIndexKeys when determining commit \
+     staleness"
 );
-pub fn log_missing_index_key() {
+pub fn log_missing_index_key_staleness() {
     // This record cases where some index was expected to be present in the
     // DocumentIndexKeys, but was not.
     //
@@ -266,7 +282,27 @@ pub fn log_missing_index_key() {
     //   read from an index that has been deleted. Hence, the conflict will be
     //   detected over the read on the system document.
 
-    log_counter(&DATABASE_MISSING_INDEX_KEY_TOTAL, 1);
+    log_counter(&DATABASE_MISSING_INDEX_KEY_STALENESS_TOTAL, 1);
+}
+
+register_convex_counter!(
+    DATABASE_MISSING_SEARCH_INDEX_KEY_STALENESS_TOTAL,
+    "Number of times a search index was not found in DocumentIndexKeys when determining commit \
+     staleness"
+);
+pub fn log_missing_search_index_key_staleness() {
+    // See comment in log_missing_index_key_staleness
+    log_counter(&DATABASE_MISSING_SEARCH_INDEX_KEY_STALENESS_TOTAL, 1);
+}
+
+register_convex_counter!(
+    DATABASE_MISSING_INDEX_KEY_SUBSCRIPTIONS_TOTAL,
+    "Number of times a database index was not found in DocumentIndexKeys when updating \
+     subscriptions"
+);
+pub fn log_missing_index_key_subscriptions() {
+    // See comment in log_missing_index_key_staleness
+    log_counter(&DATABASE_MISSING_INDEX_KEY_SUBSCRIPTIONS_TOTAL, 1);
 }
 
 register_convex_histogram!(
@@ -1085,4 +1121,77 @@ register_convex_histogram!(
 );
 pub fn log_subscriptions_invalidated(num: usize) {
     log_distribution(&SUBSCRIPTION_INVALIDATION_UPDATES, num as f64);
+}
+
+register_convex_histogram!(
+    SUBSCRIPTION_LOG_ITERATE_SECONDS,
+    "Time to iterate over the write log when advancing subscriptions",
+);
+pub fn subscriptions_log_iterate_timer() -> Timer<VMHistogram> {
+    Timer::new(&SUBSCRIPTION_LOG_ITERATE_SECONDS)
+}
+
+register_convex_histogram!(
+    SUBSCRIPTION_PROCESS_WRITE_LOG_ENTRY_SECONDS,
+    "Time to process one write log entry when advancing subscriptions",
+);
+pub fn subscription_process_write_log_entry_timer() -> Timer<VMHistogram> {
+    Timer::new(&SUBSCRIPTION_PROCESS_WRITE_LOG_ENTRY_SECONDS)
+}
+
+register_convex_histogram!(
+    SUBSCRIPTION_LOG_INVALIDATE_SECONDS,
+    "Time to invalidate segsstiptions when edvancing rh_ log",
+);
+pub fn subscriptions_invalidate_timer() -> Timer<VMHistogram> {
+    Timer::new(&SUBSCRIPTION_LOG_INVALIDATE_SECONDS)
+}
+
+register_convex_histogram!(
+    SUBSCRIPTION_LOG_ENFORCE_RETENTION_SECONDS,
+    "Time to enforce retention policy when advancing subscriptions",
+);
+pub fn subscriptions_log_enforce_retention_timer() -> Timer<VMHistogram> {
+    Timer::new(&SUBSCRIPTION_LOG_ENFORCE_RETENTION_SECONDS)
+}
+
+register_convex_histogram!(
+    SUBSCRIPTION_LOG_PROCESSED_COMMITS,
+    "Total number of commits in the write log processed during one advance_log",
+);
+pub fn log_subscriptions_log_processed_commits(log_len: usize) {
+    log_distribution(&SUBSCRIPTION_LOG_PROCESSED_COMMITS, log_len as f64);
+}
+
+register_convex_histogram!(
+    SUBSCRIPTION_LOG_PROCESSED_WRITES,
+    "Total number of writes in the write log processed during one advance_log",
+);
+pub fn log_subscriptions_log_processed_writes(num_writes: usize) {
+    log_distribution(&SUBSCRIPTION_LOG_PROCESSED_WRITES, num_writes as f64);
+}
+
+register_convex_counter!(
+    INDEX_TOO_LARGE_BLOCKING_WRITES,
+    "Number of transactions that failed because search indexes hadn't flushed",
+    &[SEARCH_TYPE_LABEL]
+);
+pub fn log_index_too_large_blocking_writes(index_type: SearchType) {
+    log_counter_with_labels(&INDEX_TOO_LARGE_BLOCKING_WRITES, 1, vec![index_type.tag()]);
+}
+
+register_convex_histogram!(
+    SUBSCRIPTION_QUEUE_LAG_SECONDS,
+    "How long subscription requests wait in the subscription worker queue",
+);
+pub fn log_subscription_queue_lag(seconds: f64) {
+    log_distribution(&SUBSCRIPTION_QUEUE_LAG_SECONDS, seconds);
+}
+
+register_convex_gauge!(
+    SUBSCRIPTION_QUEUE_LENGTH_INFO,
+    "The number of items in subscription queues",
+);
+pub fn log_subscription_queue_length_delta(delta: i64) {
+    SUBSCRIPTION_QUEUE_LENGTH_INFO.add(delta as f64);
 }

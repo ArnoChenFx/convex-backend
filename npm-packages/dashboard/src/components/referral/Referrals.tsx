@@ -62,7 +62,7 @@ export function ReferralsInner({
 
       <Sheet>
         <h3>Refer friends and earn free Convex resources</h3>
-        <p className="mt-1 max-w-lg text-content-secondary">
+        <p className="mt-1 max-w-prose">
           Each time you refer someone, both of your teams get the following
           benefits on top of your{" "}
           <Link
@@ -83,7 +83,7 @@ export function ReferralsInner({
           <hr className="grow" />
         </div>
 
-        <ul className="mb-3 mt-4 grid gap-x-2 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="mt-4 mb-3 grid gap-x-2 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
           <ReferralsBenefits />
         </ul>
 

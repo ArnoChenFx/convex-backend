@@ -85,7 +85,7 @@ export function RedeemReferralForm({
               plan limits:
             </p>
 
-            <ul className="mb-3 mt-4 grid gap-x-2 gap-y-4 sm:grid-cols-2">
+            <ul className="mt-4 mb-3 grid gap-x-2 gap-y-4 sm:grid-cols-2">
               <ReferralsBenefits />
             </ul>
 
@@ -182,8 +182,8 @@ function teamEligibilityErrorMessage(error: TeamEligibilityError) {
     case "not_admin":
       return "You must be an admin of the team to redeem a referral code.";
     default: {
-      const exhaustiveCheck: never = error;
-      throw new Error(`Unknown team eligibility error: ${exhaustiveCheck}`);
+      error satisfies never;
+      throw new Error(`Unknown team eligibility error: ${error}`);
     }
   }
 }

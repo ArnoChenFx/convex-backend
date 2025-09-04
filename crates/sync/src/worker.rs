@@ -17,6 +17,7 @@ use application::{
         ExecuteQueryTimestamp,
         SubscriptionClient,
         SubscriptionTrait,
+        SubscriptionValidity,
     },
     redaction::{
         RedactedJsError,
@@ -235,15 +236,16 @@ pub struct SyncWorker<RT: Runtime> {
     // Has an update been scheduled for the future?
     update_scheduled: bool,
 
-    /// If we've seen a SearchIndexesUnavailable error, wait for this Future to
-    /// resolve before retrying
-    search_query_retry_future: Option<Fuse<BoxFuture<'static, ()>>>,
+    /// If we've seen a FeatureTemporarilyUnavailable error, wait for this
+    /// Future to resolve before retrying
+    unavailable_query_retry_future: Option<Fuse<BoxFuture<'static, ()>>>,
 
     /// Timers to track time between handling ModifyQuerySet message and sending
     /// the Transition with the update
     modify_query_to_transition_timers: BTreeMap<QuerySetVersion, StatusTimer>,
 
     on_connect: Option<(StatusTimer, Box<dyn FnOnce(SessionId) + Send>)>,
+    partition_id: u64,
 }
 
 enum QueryResult {
@@ -252,9 +254,9 @@ enum QueryResult {
         log_lines: RedactedLogLines,
         journal: SerializedQueryJournal,
     },
-    /// Skip returning results of this query because search indexes are
-    /// unavailable
-    SearchIndexesUnavailable,
+    /// Skip returning results of this query because search indexes or table
+    /// summaries are unavailable
+    TemporarilyUnavailable,
     Refresh,
 }
 
@@ -264,7 +266,7 @@ struct TransitionState {
     current_version: StateVersion,
     new_version: StateVersion,
     timer: StatusTimer,
-    search_indexes_unavailable: bool,
+    temporarily_unavailable: bool,
 }
 
 impl<RT: Runtime> SyncWorker<RT> {
@@ -276,6 +278,7 @@ impl<RT: Runtime> SyncWorker<RT> {
         rx: mpsc::UnboundedReceiver<(ClientMessage, tokio::time::Instant)>,
         tx: SingleFlightSender,
         on_connect: Box<dyn FnOnce(SessionId) + Send>,
+        partition_id: u64,
     ) -> Self {
         let (mutation_sender, receiver) = mpsc::channel(OPERATION_QUEUE_BUFFER_SIZE);
         let mutation_futures = ReceiverStream::new(receiver).buffered(1); // Execute at most one operation at a time.
@@ -283,7 +286,7 @@ impl<RT: Runtime> SyncWorker<RT> {
             api,
             config,
             rt,
-            state: SyncState::new(),
+            state: SyncState::new(partition_id),
             host,
             rx,
             tx,
@@ -292,9 +295,10 @@ impl<RT: Runtime> SyncWorker<RT> {
             action_futures: FuturesUnordered::new(),
             transition_future: None,
             update_scheduled: false,
-            search_query_retry_future: None,
+            unavailable_query_retry_future: None,
             modify_query_to_transition_timers: BTreeMap::new(),
-            on_connect: Some((connect_timer(), on_connect)),
+            on_connect: Some((connect_timer(partition_id), on_connect)),
+            partition_id,
         }
     }
 
@@ -302,10 +306,10 @@ impl<RT: Runtime> SyncWorker<RT> {
         self.update_scheduled = true;
     }
 
-    fn schedule_search_query_retry(&mut self) {
-        if self.search_query_retry_future.is_none() {
+    fn schedule_unavailable_query_retry(&mut self) {
+        if self.unavailable_query_retry_future.is_none() {
             let rt = self.rt.clone();
-            self.search_query_retry_future = Some(
+            self.unavailable_query_retry_future = Some(
                 async move {
                     rt.wait(*SEARCH_INDEXES_UNAVAILABLE_RETRY_DELAY).await;
                 }
@@ -321,7 +325,7 @@ impl<RT: Runtime> SyncWorker<RT> {
     pub async fn go(&mut self) -> anyhow::Result<()> {
         let mut ping_timeout = self.rt.wait(HEARTBEAT_INTERVAL);
         let mut pending = future::pending().boxed().fuse();
-        let mut search_retry_pending = future::pending().boxed().fuse();
+        let mut unavailable_retry_pending = future::pending().boxed().fuse();
 
         // Create a new subscription client for every sync socket. Thus we don't require
         // the subscription client to auto-recover on connection failures.
@@ -341,7 +345,7 @@ impl<RT: Runtime> SyncWorker<RT> {
                     };
                     self.handle_message(message).await?;
                     let delay = self.rt.monotonic_now() - received_time;
-                    metrics::log_process_client_message_delay(delay);
+                    metrics::log_process_client_message_delay(self.partition_id, delay);
                     None
                 },
                 // TODO(presley): If I swap this with futures below, tests break.
@@ -370,11 +374,11 @@ impl<RT: Runtime> SyncWorker<RT> {
                     self.transition_future = None;
                     Some(self.finish_update_queries(transition_state?)?)
                 },
-                _ = self.search_query_retry_future
+                _ = self.unavailable_query_retry_future
                         .as_mut()
-                        .unwrap_or(&mut search_retry_pending) => {
-                    tracing::info!("Scheduling an update to queries after a search query failed because of search indexes bootstrapping.");
-                    self.search_query_retry_future = None;
+                        .unwrap_or(&mut unavailable_retry_pending) => {
+                    tracing::info!("Scheduling an update to queries after a query failed because of async bootstrapping.");
+                    self.unavailable_query_retry_future = None;
                     self.schedule_update();
                     None
                 },
@@ -456,7 +460,7 @@ impl<RT: Runtime> SyncWorker<RT> {
     }
 
     async fn handle_message(&mut self, message: ClientMessage) -> anyhow::Result<()> {
-        let timer = metrics::handle_message_timer(&message);
+        let timer = metrics::handle_message_timer(self.partition_id, &message);
         match message {
             ClientMessage::Connect {
                 session_id,
@@ -482,6 +486,7 @@ impl<RT: Runtime> SyncWorker<RT> {
                         // into a client error if there are bogus custom client implementations
                         // but lets keep it as server one for now.
                         metrics::log_linearizability_violation(
+                            self.partition_id,
                             max_observed_timestamp.secs_since_f64(latest_timestamp),
                         );
                         anyhow::bail!(
@@ -490,7 +495,7 @@ impl<RT: Runtime> SyncWorker<RT> {
                         );
                     }
                 }
-                metrics::log_connect(last_close_reason, connection_count)
+                metrics::log_connect(self.partition_id, last_close_reason, connection_count)
             },
             ClientMessage::ModifyQuerySet {
                 base_version,
@@ -500,8 +505,10 @@ impl<RT: Runtime> SyncWorker<RT> {
                 self.state
                     .modify_query_set(base_version, new_version, modifications)?;
                 self.schedule_update();
-                self.modify_query_to_transition_timers
-                    .insert(new_version, modify_query_to_transition_timer());
+                self.modify_query_to_transition_timers.insert(
+                    new_version,
+                    modify_query_to_transition_timer(self.partition_id),
+                );
             },
             ClientMessage::Mutation {
                 request_id,
@@ -530,7 +537,7 @@ impl<RT: Runtime> SyncWorker<RT> {
                 );
                 let rt = self.rt.clone();
                 let client_version = self.config.client_version.clone();
-                let timer = mutation_queue_timer();
+                let timer = mutation_queue_timer(self.partition_id);
                 let api = self.api.clone();
                 let host = self.host.clone();
                 let caller = FunctionCaller::SyncWorker(client_version);
@@ -717,7 +724,7 @@ impl<RT: Runtime> SyncWorker<RT> {
                 match TypedClientEvent::try_from(client_event) {
                     Ok(typed_client_event) => match typed_client_event {
                         TypedClientEvent::ClientConnect { marks } => {
-                            metrics::log_client_connect_timings(marks)
+                            metrics::log_client_connect_timings(self.partition_id, marks)
                         },
                     },
                     Err(_) => (),
@@ -743,7 +750,7 @@ impl<RT: Runtime> SyncWorker<RT> {
             },
         );
         let _guard = root.set_local_parent();
-        let timer = metrics::update_queries_timer();
+        let timer = metrics::update_queries_timer(self.partition_id);
         let current_version = self.state.current_version();
 
         let (modifications, new_query_version, pending_identity, new_identity_version) =
@@ -798,6 +805,7 @@ impl<RT: Runtime> SyncWorker<RT> {
         let need_fetch: Vec<_> = self.state.need_fetch().collect();
         let host = self.host.clone();
         let client_version = self.config.client_version.clone();
+        let partition_id = self.partition_id;
         Ok(async move {
             let future_results: anyhow::Result<Vec<_>> = try_join_buffer_unordered(
                 "update_query",
@@ -812,10 +820,16 @@ impl<RT: Runtime> SyncWorker<RT> {
                         LocalSpan::add_property(|| ("udf_path", query.udf_path.to_string()));
                         let new_subscription = match current_subscription {
                             Some(subscription) => {
-                                if subscription.extend_validity(new_ts).await? {
-                                    Some(subscription)
-                                } else {
-                                    None
+                                match subscription.extend_validity(new_ts).await? {
+                                    SubscriptionValidity::Valid => Some(subscription),
+                                    SubscriptionValidity::Invalid { invalid_ts } => {
+                                        metrics::log_query_invalidated(
+                                            partition_id,
+                                            invalid_ts,
+                                            new_ts,
+                                        );
+                                        None
+                                    },
                                 }
                             },
                             None => None,
@@ -868,10 +882,16 @@ impl<RT: Runtime> SyncWorker<RT> {
                                 };
                                 match udf_return_result {
                                     Err(e) => {
+                                        // TODO: use ErrorCode::FeatureTemporarilyUnavailable
+                                        // instead
                                         if let Some(error) = e.downcast_ref::<ErrorMetadata>()
-                                            && error.short_msg == "SearchIndexesUnavailable"
+                                            && [
+                                                "SearchIndexesUnavailable",
+                                                "TableSummariesUnavailable",
+                                            ]
+                                            .contains(&&*error.short_msg)
                                         {
-                                            (QueryResult::SearchIndexesUnavailable, None)
+                                            (QueryResult::TemporarilyUnavailable, None)
                                         } else {
                                             anyhow::bail!(e)
                                         }
@@ -899,11 +919,11 @@ impl<RT: Runtime> SyncWorker<RT> {
             .await;
 
             let mut udf_results = vec![];
-            let mut search_indexes_unavailable = false;
+            let mut temporarily_unavailable = false;
             for result in future_results? {
                 let (query_id, result, maybe_subscription) = result;
-                if matches!(result, QueryResult::SearchIndexesUnavailable) {
-                    search_indexes_unavailable = true;
+                if matches!(result, QueryResult::TemporarilyUnavailable) {
+                    temporarily_unavailable = true;
                 }
                 if let Some(subscription) = maybe_subscription {
                     udf_results.push((query_id, result, subscription));
@@ -916,7 +936,7 @@ impl<RT: Runtime> SyncWorker<RT> {
                 current_version,
                 new_version,
                 timer,
-                search_indexes_unavailable,
+                temporarily_unavailable,
             })
         }
         .in_span(root))
@@ -930,7 +950,7 @@ impl<RT: Runtime> SyncWorker<RT> {
             current_version,
             new_version,
             timer,
-            search_indexes_unavailable,
+            temporarily_unavailable,
         }: TransitionState,
     ) -> anyhow::Result<ServerMessage> {
         for (query_id, result, subscription) in udf_results {
@@ -955,17 +975,17 @@ impl<RT: Runtime> SyncWorker<RT> {
                 QueryResult::Refresh => {
                     self.state.refill_subscription(query_id, subscription)?;
                 },
-                QueryResult::SearchIndexesUnavailable => {
+                QueryResult::TemporarilyUnavailable => {
                     anyhow::bail!(
-                        "No QueryResult::SearchIndexesUnavailable should have a udf result and \
+                        "No QueryResult::TemporarilyUnavailable should have a udf result and \
                          subscription"
                     )
                 },
             }
         }
 
-        if search_indexes_unavailable {
-            self.schedule_search_query_retry();
+        if temporarily_unavailable {
+            self.schedule_unavailable_query_retry();
         }
 
         // Resubscribe for queries that don't have an active invalidation
@@ -980,12 +1000,12 @@ impl<RT: Runtime> SyncWorker<RT> {
             modifications: state_modifications.into_values().collect(),
         };
         timer.finish();
-        metrics::log_query_set_size(self.state.num_queries());
+        metrics::log_query_set_size(self.partition_id, self.state.num_queries());
         // Only retain timers for queries that haven't been updated yet. Finish the
         // timers for everything up through the new version.
         let finished_timers = self
             .modify_query_to_transition_timers
-            .extract_if(|version, _| *version <= new_version.query_set);
+            .extract_if(.., |version, _| *version <= new_version.query_set);
         for (_, timer) in finished_timers {
             timer.finish();
         }

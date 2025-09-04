@@ -34,7 +34,7 @@ use model::log_sinks::types::{
 use serde::Deserialize;
 
 use crate::{
-    admin::must_be_admin_member_with_write_access,
+    admin::must_be_admin_with_write_access,
     authentication::ExtractIdentity,
     LocalAppState,
 };
@@ -75,7 +75,7 @@ pub async fn add_datadog_sink(
     ExtractIdentity(identity): ExtractIdentity,
     Json(args): Json<DatadogSinkPostArgs>,
 ) -> Result<impl IntoResponse, HttpResponseError> {
-    must_be_admin_member_with_write_access(&identity)?;
+    must_be_admin_with_write_access(&identity)?;
     st.application
         .ensure_log_streaming_allowed(identity)
         .await?;
@@ -91,7 +91,6 @@ pub async fn add_datadog_sink(
 #[serde(rename_all = "camelCase")]
 pub struct WebhookSinkPostArgs {
     url: String,
-    #[serde(default)]
     format: WebhookFormat,
 }
 
@@ -118,7 +117,7 @@ pub async fn add_webhook_sink(
     ExtractIdentity(identity): ExtractIdentity,
     Json(args): Json<WebhookSinkPostArgs>,
 ) -> Result<impl IntoResponse, HttpResponseError> {
-    must_be_admin_member_with_write_access(&identity)?;
+    must_be_admin_with_write_access(&identity)?;
     st.application
         .ensure_log_streaming_allowed(identity)
         .await?;
@@ -165,7 +164,7 @@ pub async fn add_axiom_sink(
     ExtractIdentity(identity): ExtractIdentity,
     Json(args): Json<AxiomSinkPostArgs>,
 ) -> Result<impl IntoResponse, HttpResponseError> {
-    must_be_admin_member_with_write_access(&identity)?;
+    must_be_admin_with_write_access(&identity)?;
     st.application
         .ensure_log_streaming_allowed(identity)
         .await?;
@@ -190,7 +189,7 @@ pub async fn add_sentry_sink(
     ExtractIdentity(identity): ExtractIdentity,
     Json(args): Json<SerializedSentryConfig>,
 ) -> Result<impl IntoResponse, HttpResponseError> {
-    must_be_admin_member_with_write_access(&identity)?;
+    must_be_admin_with_write_access(&identity)?;
     st.application
         .ensure_log_streaming_allowed(identity)
         .await?;
@@ -212,7 +211,7 @@ pub async fn delete_log_sink(
     ExtractIdentity(identity): ExtractIdentity,
     Json(LogSinkDeleteArgs { sink_type }): Json<LogSinkDeleteArgs>,
 ) -> Result<impl IntoResponse, HttpResponseError> {
-    must_be_admin_member_with_write_access(&identity)?;
+    must_be_admin_with_write_access(&identity)?;
     st.application
         .ensure_log_streaming_allowed(identity)
         .await?;

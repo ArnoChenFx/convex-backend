@@ -20,8 +20,10 @@ import { DocsGrid } from "components/projects/DocsGrid";
 import { useCreateProjectModal } from "hooks/useCreateProjectModal";
 import { withAuthenticatedPage } from "lib/withAuthenticatedPage";
 import Head from "next/head";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@ui/cn";
+import { PaginationControls } from "elements/PaginationControls";
+import { usePagination } from "hooks/usePagination";
 
 export { getServerSideProps } from "lib/ssr";
 
@@ -110,9 +112,22 @@ function ProjectGrid({ projects }: { projects: ProjectDetails[] }) {
 
   const [projectQuery, setProjectQuery] = useState("");
 
-  const filteredProjects = projects
-    .filter((p) => p.name.toLowerCase().includes(projectQuery.toLowerCase()))
-    .sort((a, b) => b.createTime - a.createTime);
+  const {
+    visibleItems: paginatedProjects,
+    totalPages,
+    currentPage,
+    setCurrentPage,
+  } = usePagination({
+    items: projects
+      .filter((p) => p.name.toLowerCase().includes(projectQuery.toLowerCase()))
+      .sort((a, b) => b.createTime - a.createTime),
+    itemsPerPage: 100,
+  });
+
+  // Reset to first page when search query changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [projectQuery, setCurrentPage]);
 
   return (
     <div className="flex flex-col items-center">
@@ -153,7 +168,7 @@ function ProjectGrid({ projects }: { projects: ProjectDetails[] }) {
           >
             Create Project
           </Button>
-          {filteredProjects.length > 0 && (
+          {paginatedProjects.length > 0 && (
             <Button
               href="https://docs.convex.dev/tutorial"
               size="sm"
@@ -165,13 +180,19 @@ function ProjectGrid({ projects }: { projects: ProjectDetails[] }) {
           )}
         </div>
       </div>
-      {projects.length > 0 && filteredProjects.length === 0 && (
+      <PaginationControls
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+        className="mb-2 ml-auto"
+      />
+      {projects.length > 0 && paginatedProjects.length === 0 && (
         <div className="my-24 flex flex-col items-center gap-2 text-content-secondary">
           There are no projects matching your search.
         </div>
       )}
       {projects.length === 0 && (
-        <div className="mb-24 mt-8 flex w-full animate-fadeInFromLoading flex-col items-center justify-center gap-6">
+        <div className="mt-8 mb-24 flex w-full animate-fadeInFromLoading flex-col items-center justify-center gap-6">
           <h3>Welcome to Convex!</h3>
           <p>Get started by following the tutorial.</p>
 
@@ -192,10 +213,18 @@ function ProjectGrid({ projects }: { projects: ProjectDetails[] }) {
           !showAsList && "lg:grid-cols-2 xl:grid-cols-3",
         )}
       >
-        {filteredProjects.map((p: ProjectDetails) => (
+        {paginatedProjects.map((p: ProjectDetails) => (
           <ProjectCard key={p.id} project={p} />
         ))}
       </div>
+
+      <PaginationControls
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+        className="ml-auto"
+      />
+
       {createProjectModal}
     </div>
   );

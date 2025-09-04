@@ -64,6 +64,7 @@ use tempfile::TempDir;
 use value::{
     assert_obj,
     ConvexValue,
+    DeveloperDocumentId,
     FieldPath,
     ResolvedDocumentId,
     TableName,
@@ -82,9 +83,11 @@ use vector::{
 
 use super::DbFixtures;
 use crate::{
-    index_workers::{
+    bootstrap_model::index_backfills::IndexBackfillModel,
+    search_index_workers::{
         search_compactor::CompactionConfig,
         search_flusher::FLUSH_RUNNING_LABEL,
+        FlusherType,
     },
     test_helpers::DbFixturesArgs,
     vector_index_worker::{
@@ -99,7 +102,9 @@ use crate::{
         },
     },
     Database,
+    IndexBackfillMetadata,
     IndexModel,
+    SystemMetadataModel,
     TestFacingModel,
     Transaction,
     UserFacingModel,
@@ -222,6 +227,16 @@ impl VectorFixtures {
         Ok(result)
     }
 
+    pub async fn index_backfill_progress(
+        &self,
+        index_id: DeveloperDocumentId,
+    ) -> anyhow::Result<Option<Arc<ParsedDocument<IndexBackfillMetadata>>>> {
+        let mut tx = self.db.begin_system().await?;
+        IndexBackfillModel::new(&mut tx)
+            .existing_backfill_metadata(index_id)
+            .await
+    }
+
     pub async fn new_compactor(&self) -> anyhow::Result<VectorIndexCompactor<TestRuntime>> {
         self.new_compactor_with_searchlight(self.searcher.clone())
             .await
@@ -258,12 +273,26 @@ impl VectorFixtures {
         ))
     }
 
-    pub fn new_index_flusher(&self) -> anyhow::Result<VectorIndexFlusher<TestRuntime>> {
-        self.new_index_flusher_with_full_scan_threshold(*MULTI_SEGMENT_FULL_SCAN_THRESHOLD_KB)
+    pub fn new_backfill_index_flusher(&self) -> anyhow::Result<VectorIndexFlusher<TestRuntime>> {
+        self.new_index_flusher_with_full_scan_threshold(
+            *MULTI_SEGMENT_FULL_SCAN_THRESHOLD_KB,
+            FlusherType::Backfill,
+        )
     }
 
-    pub async fn run_compaction_during_flush(&self, pause: PauseController) -> anyhow::Result<()> {
-        let mut flusher = new_vector_flusher_for_tests(
+    pub fn new_live_index_flusher(&self) -> anyhow::Result<VectorIndexFlusher<TestRuntime>> {
+        self.new_index_flusher_with_full_scan_threshold(
+            *MULTI_SEGMENT_FULL_SCAN_THRESHOLD_KB,
+            FlusherType::LiveFlush,
+        )
+    }
+
+    pub async fn run_compaction_during_flush(
+        &self,
+        pause: PauseController,
+        flusher_type: FlusherType,
+    ) -> anyhow::Result<()> {
+        let flusher = new_vector_flusher_for_tests(
             self.rt.clone(),
             self.db.clone(),
             self.reader.clone(),
@@ -272,6 +301,7 @@ impl VectorFixtures {
             0,
             *MULTI_SEGMENT_FULL_SCAN_THRESHOLD_KB,
             8,
+            flusher_type,
         );
         let hold_guard = pause.hold(FLUSH_RUNNING_LABEL);
         let flush = flusher.step();
@@ -290,6 +320,7 @@ impl VectorFixtures {
     pub fn new_index_flusher_with_full_scan_threshold(
         &self,
         full_scan_threshold_kb: usize,
+        flusher_type: FlusherType,
     ) -> anyhow::Result<VectorIndexFlusher<TestRuntime>> {
         Ok(new_vector_flusher_for_tests(
             self.rt.clone(),
@@ -300,12 +331,14 @@ impl VectorFixtures {
             0,
             full_scan_threshold_kb,
             *VECTOR_INDEX_SIZE_SOFT_LIMIT,
+            flusher_type,
         ))
     }
 
     pub fn new_index_flusher_with_incremental_part_threshold(
         &self,
         incremental_part_threshold: usize,
+        // flusher_type: FlusherType,
     ) -> anyhow::Result<VectorIndexFlusher<TestRuntime>> {
         Ok(new_vector_flusher_for_tests(
             self.rt.clone(),
@@ -316,6 +349,7 @@ impl VectorFixtures {
             0,
             *MULTI_SEGMENT_FULL_SCAN_THRESHOLD_KB,
             incremental_part_threshold,
+            FlusherType::Backfill,
         ))
     }
 
@@ -333,6 +367,22 @@ impl VectorFixtures {
         Ok(metadata)
     }
 
+    pub async fn inject_last_segment_ts_into_backfilling_vector_index(
+        &self,
+        index_name: IndexName,
+        index_id: ResolvedDocumentId,
+        namespace: TableNamespace,
+    ) -> anyhow::Result<()> {
+        let mut tx = self.db.begin_system().await?;
+        let mut index_metadata = self.get_index_metadata(index_name).await?.into_value();
+        index_metadata.inject_last_segment_ts_into_backfilling_vector_index()?;
+        let mut model = SystemMetadataModel::new(&mut tx, namespace);
+        model.replace(index_id, index_metadata.try_into()?).await?;
+        self.db.commit(tx).await?;
+
+        Ok(())
+    }
+
     pub async fn get_segments_metadata(
         &self,
         index_name: GenericIndexName<TableName>,
@@ -341,9 +391,8 @@ impl VectorFixtures {
         must_let!(let IndexConfig::Vector { on_disk_state, .. } = &metadata.config);
         let snapshot = match on_disk_state {
             VectorIndexState::Backfilling(_) => anyhow::bail!("Still backfilling!"),
-            VectorIndexState::Backfilled(snapshot) | VectorIndexState::SnapshottedAt(snapshot) => {
-                snapshot
-            },
+            VectorIndexState::Backfilled { snapshot, .. }
+            | VectorIndexState::SnapshottedAt(snapshot) => snapshot,
         };
         must_let!(let VectorIndexSnapshotData::MultiSegment(segments) = &snapshot.data);
         Ok(segments.clone())
@@ -432,6 +481,7 @@ pub struct IndexData {
     pub index_name: IndexName,
     pub resolved_index_name: TabletIndexName,
     pub namespace: TableNamespace,
+    pub metadata: IndexMetadata<TableName>,
 }
 
 fn new_backfilling_vector_index() -> anyhow::Result<IndexMetadata<TableName>> {
@@ -480,6 +530,7 @@ pub async fn backfilling_vector_index(db: &Database<TestRuntime>) -> anyhow::Res
         resolved_index_name,
         index_name: index_name.clone(),
         namespace,
+        metadata: index_metadata,
     })
 }
 
@@ -520,7 +571,7 @@ pub(crate) async fn assert_backfilled(
         .into_value();
     must_let!(let IndexMetadata {
             config: IndexConfig::Vector {
-                on_disk_state: VectorIndexState::Backfilled(VectorIndexSnapshot { ts, .. }),
+                on_disk_state: VectorIndexState::Backfilled { snapshot: VectorIndexSnapshot { ts, .. }, staged: false },
                 ..
             },
             ..

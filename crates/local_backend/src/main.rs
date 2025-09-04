@@ -11,7 +11,10 @@ use common::{
     shutdown::ShutdownSignal,
     version::SERVER_VERSION_STR,
 };
-use db_connection::connect_persistence;
+use db_connection::{
+    connect_persistence,
+    ConnectPersistenceFlags,
+};
 use futures::{
     future::{
         self,
@@ -44,7 +47,7 @@ fn main() -> Result<(), MainError> {
             "The self-host Convex backend will periodically communicate with a remote beacon \
              server. This is to help Convex understand and improve the product. You can disable \
              this telemetry by setting the --disable-beacon flag or the DISABLE_BEACON \
-             environment variable if you are self-hosting using the Docker image."
+             environment variable."
         );
     }
     let sentry = sentry::init(sentry::ClientOptions {
@@ -106,8 +109,11 @@ async fn run_server_inner(runtime: ProdRuntime, config: LocalConfig) -> anyhow::
     let persistence = connect_persistence(
         config.db,
         &config.db_spec,
-        !config.do_not_require_ssl,
-        false, /* allow_read_only */
+        ConnectPersistenceFlags {
+            require_ssl: !config.do_not_require_ssl,
+            allow_read_only: false,
+            skip_index_creation: false,
+        },
         &config.name(),
         runtime.clone(),
         preempt_signal.clone(),

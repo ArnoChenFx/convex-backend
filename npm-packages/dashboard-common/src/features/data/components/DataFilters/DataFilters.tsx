@@ -12,7 +12,7 @@ import {
   Filter,
   FilterByIndex,
   FilterByIndexRange,
-  FilterExpression,
+  DatabaseFilterExpression,
   FilterValidationError,
 } from "system-udfs/convex/_system/frontend/lib/filters";
 import {
@@ -35,10 +35,16 @@ import {
   documentValidatorForTable,
   validatorForColumn,
 } from "@common/features/data/components/Table/utils/validators";
-import { useFilterHistory } from "@common/features/data/lib/useTableFilters";
+import {
+  useFilterHistory,
+  useTableFilters,
+} from "@common/features/data/lib/useTableFilters";
 import { cn } from "@ui/cn";
-import { useTableIndexes } from "@common/features/data/lib/api";
 import { DeploymentInfoContext } from "@common/lib/deploymentContext";
+import { useNents } from "@common/lib/useNents";
+import { useQuery } from "convex/react";
+import { api } from "system-udfs/convex/_generated/api";
+import { Index } from "@common/features/data/lib/api";
 import { IndexFilterState } from "./IndexFilterEditor";
 import { IndexFilters, getDefaultIndex } from "./IndexFilters";
 
@@ -48,7 +54,7 @@ export function DataFilters({
   tableFields,
   componentId,
   filters,
-  onChangeFilters,
+  onFiltersChange,
   dataFetchErrors,
   draftFilters,
   setDraftFilters,
@@ -63,11 +69,11 @@ export function DataFilters({
   tableName: string;
   tableFields: string[];
   componentId: string | null;
-  filters?: FilterExpression;
-  onChangeFilters(next: FilterExpression): void;
+  filters?: DatabaseFilterExpression;
+  onFiltersChange(next: DatabaseFilterExpression): void;
   dataFetchErrors?: FilterValidationError[];
-  draftFilters?: FilterExpression;
-  setDraftFilters(next: FilterExpression): void;
+  draftFilters?: DatabaseFilterExpression;
+  setDraftFilters(next: DatabaseFilterExpression): void;
   activeSchema: SchemaJson | null;
   numRows?: number;
   numRowsLoaded: number;
@@ -75,7 +81,12 @@ export function DataFilters({
   showFilters: boolean;
   setShowFilters: React.Dispatch<React.SetStateAction<boolean>>;
 }) {
-  const { indexes } = useTableIndexes(tableName);
+  const { selectedNent } = useNents();
+  const indexes =
+    (useQuery(api._system.frontend.indexes.default, {
+      tableName,
+      tableNamespace: selectedNent?.id ?? null,
+    }) satisfies undefined | null | Index[]) ?? undefined;
   const {
     isDirty,
     hasInvalidFilters,
@@ -91,11 +102,12 @@ export function DataFilters({
     onChangeOrder,
     getValidatorForField,
     onChangeIndexFilter,
+    applyFiltersWithHistory,
   } = useDataFilters({
     tableName,
     componentId,
     filters,
-    onChangeFilters,
+    onFiltersChange,
     draftFilters,
     setDraftFilters,
     activeSchema,
@@ -103,13 +115,12 @@ export function DataFilters({
 
   const numRowsWeKnowOf = hasFilters ? numRowsLoaded : numRows;
 
-  const { enableIndexFilters } = useContext(DeploymentInfoContext);
   const { useLogDeploymentEvent } = useContext(DeploymentInfoContext);
   const log = useLogDeploymentEvent();
 
   return (
     <form
-      className="flex w-full flex-col gap-2 rounded-t border border-b-0 bg-background-secondary/50 p-2"
+      className="flex w-full flex-col gap-2 rounded-t-lg border border-b-0 bg-background-secondary/50 p-2"
       id={filterMenuId}
       data-testid="filterMenu"
       onSubmit={(e) => {
@@ -124,7 +135,7 @@ export function DataFilters({
           hasOtherFilters:
             shownFilters.clauses.filter((c) => c.enabled !== false).length > 0,
         });
-        onChangeFilters(
+        onFiltersChange(
           draftFilters || {
             clauses: [],
             index: undefined,
@@ -138,7 +149,7 @@ export function DataFilters({
           <div className="flex items-center">
             <div
               className={cn(
-                "flex w-full rounded-lg bg-background-secondary border",
+                "flex w-full rounded-lg border bg-background-secondary",
                 showFilters && "rounded-b-none border-b-0",
               )}
             >
@@ -214,41 +225,38 @@ export function DataFilters({
         </div>
         {indexes && showFilters && (
           <div className="w-full animate-fadeInFromLoading">
-            <div className="flex w-full flex-col gap-2 overflow-x-auto rounded-sm rounded-tl-none border bg-background-secondary p-2 pb-2.5 scrollbar">
-              {enableIndexFilters && (
-                <IndexFilters
-                  shownFilters={shownFilters}
-                  defaultDocument={defaultDocument}
-                  indexes={indexes}
-                  tableName={tableName}
-                  activeSchema={activeSchema}
-                  getValidatorForField={getValidatorForField}
-                  onChangeFilters={onChangeFilters}
-                  setDraftFilters={setDraftFilters}
-                  onChangeOrder={onChangeOrder}
-                  onChangeIndexFilter={onChangeIndexFilter}
-                  invalidFilters={invalidFilters}
-                  onError={(...args) => onError("index", ...args)}
-                  hasInvalidFilters={hasInvalidFilters}
-                />
-              )}
+            <div className="scrollbar flex w-full flex-col gap-2 overflow-x-auto rounded-sm rounded-tl-none border bg-background-secondary p-2 pb-2.5">
+              <IndexFilters
+                shownFilters={shownFilters}
+                defaultDocument={defaultDocument}
+                indexes={indexes}
+                tableName={tableName}
+                activeSchema={activeSchema}
+                getValidatorForField={getValidatorForField}
+                onFiltersChange={onFiltersChange}
+                applyFiltersWithHistory={applyFiltersWithHistory}
+                setDraftFilters={setDraftFilters}
+                onChangeOrder={onChangeOrder}
+                onChangeIndexFilter={onChangeIndexFilter}
+                invalidFilters={invalidFilters}
+                onError={(...args) => onError("index", ...args)}
+                hasInvalidFilters={hasInvalidFilters}
+              />
               {shownFilters.clauses.length > 0 && (
                 <div className="mt-2 flex flex-col gap-2">
-                  {enableIndexFilters && (
-                    <div className="flex items-center gap-1">
-                      <hr className="w-2" />{" "}
-                      <p className="flex items-center gap-1 text-xs text-content-secondary">
-                        Other Filters
-                        <Tooltip
-                          tip="Other filters are not indexed and are applied after the indexed filters. These filters are less efficient."
-                          side="right"
-                        >
-                          <InfoCircledIcon />
-                        </Tooltip>
-                      </p>{" "}
-                      <hr className="grow" />
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1">
+                    <hr className="w-2" />{" "}
+                    <p className="flex items-center gap-1 text-xs text-content-secondary">
+                      Other Filters
+                      <Tooltip
+                        tip="Other filters are not indexed and are applied after the indexed filters. These filters are less efficient."
+                        side="right"
+                      >
+                        <InfoCircledIcon />
+                      </Tooltip>
+                    </p>{" "}
+                    <hr className="grow" />
+                  </div>
                   {shownFilters.clauses.map((clause, idx) => (
                     <FilterItem
                       key={clause.id || idx}
@@ -272,7 +280,7 @@ export function DataFilters({
                               (c) => c.enabled !== false,
                             ).length > 0,
                         });
-                        onChangeFilters(shownFilters);
+                        onFiltersChange(shownFilters);
                       }}
                       onError={(...args) => onError("filter", ...args)}
                       error={
@@ -332,7 +340,7 @@ export function DataFilters({
                         variant="neutral"
                         className="ml-auto text-xs"
                         onClick={() => {
-                          onChangeFilters({
+                          onFiltersChange({
                             clauses: [],
                             index: shownFilters.index
                               ? {
@@ -357,7 +365,7 @@ export function DataFilters({
                 )}
                 {dataFetchErrors && dataFetchErrors.length > 0 && (
                   <p
-                    className="h-4 break-words text-xs text-content-errorSecondary"
+                    className="h-4 text-xs break-words text-content-errorSecondary"
                     role="alert"
                   >
                     {dataFetchErrors[0].error}
@@ -460,17 +468,17 @@ function useDataFilters({
   tableName,
   componentId,
   filters,
-  onChangeFilters,
+  onFiltersChange,
   draftFilters,
   setDraftFilters,
   activeSchema,
 }: {
   tableName: string;
   componentId: string | null;
-  filters?: FilterExpression;
-  onChangeFilters(next: FilterExpression): void;
-  draftFilters?: FilterExpression;
-  setDraftFilters(next: FilterExpression): void;
+  filters?: DatabaseFilterExpression;
+  onFiltersChange(next: DatabaseFilterExpression): void;
+  draftFilters?: DatabaseFilterExpression;
+  setDraftFilters(next: DatabaseFilterExpression): void;
   activeSchema: SchemaJson | null;
 }) {
   const { useLogDeploymentEvent } = useContext(DeploymentInfoContext);
@@ -498,7 +506,7 @@ function useDataFilters({
       ({
         clauses: [],
         index: getDefaultIndex(),
-      } as FilterExpression),
+      } as DatabaseFilterExpression),
     [draftFilters],
   );
 
@@ -602,7 +610,7 @@ function useDataFilters({
           ...shownFilters.clauses.slice(idx + 1),
         ],
         index: shownFilters.index || getDefaultIndex(),
-      } as FilterExpression;
+      } as DatabaseFilterExpression;
       setDraftFilters(newFilters);
     },
     [shownFilters, setDraftFilters, setInvalidFilters, log],
@@ -622,7 +630,7 @@ function useDataFilters({
           ...shownFilters.clauses.slice(idx),
         ],
         index: shownFilters.index || getDefaultIndex(),
-      } as FilterExpression;
+      } as DatabaseFilterExpression;
       setDraftFilters(newFilters);
     },
     [shownFilters, setDraftFilters, log],
@@ -639,6 +647,7 @@ function useDataFilters({
   );
 
   const { filterHistory } = useFilterHistory(tableName, componentId);
+  const { applyFiltersWithHistory } = useTableFilters(tableName, componentId);
   const [currentIdx, setCurrentIdx] = useState(0);
   useEffect(() => {
     setCurrentIdx(0);
@@ -671,9 +680,9 @@ function useDataFilters({
         order: newOrder,
       };
       setDraftFilters(newFilters);
-      onChangeFilters(newFilters);
+      onFiltersChange(newFilters);
     },
-    [shownFilters, setDraftFilters, onChangeFilters, invalidFilters, log],
+    [shownFilters, setDraftFilters, onFiltersChange, invalidFilters, log],
   );
 
   return {
@@ -691,5 +700,6 @@ function useDataFilters({
     onChangeOrder,
     getValidatorForField,
     onChangeIndexFilter,
+    applyFiltersWithHistory,
   };
 }

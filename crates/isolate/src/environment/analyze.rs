@@ -703,7 +703,7 @@ fn udf_analyze<RT: Runtime>(
 
         let canonicalized_name: FunctionName = property_name
             .parse()
-            .map_err(|e| invalid_function_name_error(&e))?;
+            .map_err(|e| invalid_function_name_error(module_path, &e))?;
         if let Some(Some(token)) = fn_source_map.as_ref().map(|sm| sm.lookup_token(lineno, linecol))
             // This condition is in place so that we don't have to jump to source in source mappings
             // to get back to the original source. This logic gets complicated and is not strictly necessary now
@@ -863,47 +863,46 @@ fn http_analyze<RT: Runtime>(
 
     for i in 0..len {
         let Some(entry) = routes_arr.get_index(scope, i) else {
-            return routes_error(format!("problem with arr[{}]", i).as_str());
+            return routes_error(format!("problem with arr[{i}]").as_str());
         };
         let Some(entry) = entry.to_object(scope) else {
-            return routes_error(format!("arr[{}] is not an object", i).as_str());
+            return routes_error(format!("arr[{i}] is not an object").as_str());
         };
 
         let Some(path) = entry.get_index(scope, 0) else {
-            return routes_error(format!("problem with arr[{}][0]", i).as_str());
+            return routes_error(format!("problem with arr[{i}][0]").as_str());
         };
         let path: Result<v8::Local<v8::String>, _> = path.try_into();
         let Ok(path) = path else {
-            return routes_error(format!("arr[{}][0] is not a string", i).as_str());
+            return routes_error(format!("arr[{i}][0] is not a string").as_str());
         };
         let path: String = path.to_rust_string_lossy(scope);
 
         let Some(method) = entry.get_index(scope, 1) else {
-            return routes_error(format!("problem with arr[{}][1]", i).as_str());
+            return routes_error(format!("problem with arr[{i}][1]").as_str());
         };
         let method: Result<v8::Local<v8::String>, _> = method.try_into();
         let Ok(method) = method else {
-            return routes_error(format!("arr[{}][1] is not a string", i).as_str());
+            return routes_error(format!("arr[{i}][1] is not a string").as_str());
         };
         let method: String = method.to_rust_string_lossy(scope);
 
         let Ok(method): Result<RoutableMethod, _> = method.parse() else {
             return routes_error(
                 format!(
-                    "'{}' is not not a routable method (one of GET, POST, PUT, DELETE, PATCH, \
-                     OPTIONS)",
-                    method
+                    "'{method}' is not not a routable method (one of GET, POST, PUT, DELETE, \
+                     PATCH, OPTIONS)"
                 )
                 .as_str(),
             );
         };
 
         let Some(function) = entry.get_index(scope, 2) else {
-            return routes_error(format!("problem with third element of {} of array", i).as_str());
+            return routes_error(format!("problem with third element of {i} of array").as_str());
         };
         let function: Result<v8::Local<v8::Object>, _> = function.try_into();
         let Ok(function) = function else {
-            return routes_error(format!("arr[{}][2] not an HttpAction", i).as_str());
+            return routes_error(format!("arr[{i}][2] not an HttpAction").as_str());
         };
 
         let handler_str = strings::_handler.create(scope)?;
@@ -913,13 +912,13 @@ fn http_analyze<RT: Runtime>(
                 handler
             },
             Some(handler_value) if !handler_value.is_undefined() => {
-                let message = format!("arr[{}][2].handler is not a function", i);
+                let message = format!("arr[{i}][2].handler is not a function");
                 return Ok(Err(JsError::from_message(message)));
             },
             _ => match function.try_into() {
                 Ok(f) => f,
                 Err(_) => {
-                    let message = format!("arr[{}][2] is not an HttpAction", i);
+                    let message = format!("arr[{i}][2] is not an HttpAction");
                     return Ok(Err(JsError::from_message(message)));
                 },
             },

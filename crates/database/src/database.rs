@@ -35,7 +35,6 @@ use common::{
             TabletIndexMetadata,
             INDEX_TABLE,
         },
-        schema::SchemaMetadata,
         tables::{
             TableMetadata,
             TableState,
@@ -69,6 +68,7 @@ use common::{
         LatestDocumentStream,
         Persistence,
         PersistenceGlobalKey,
+        PersistenceIndexEntry,
         PersistenceReader,
         PersistenceSnapshot,
         RepeatablePersistence,
@@ -121,10 +121,10 @@ use indexing::{
     backend_in_memory_indexes::{
         BackendInMemoryIndexes,
         DatabaseIndexSnapshot,
+        NoInMemoryIndexes,
     },
     index_registry::IndexRegistry,
 };
-use itertools::Itertools;
 use keybroker::Identity;
 use parking_lot::Mutex;
 use search::{
@@ -182,12 +182,19 @@ use crate::{
         TableSummaries,
     },
     stack_traces::StackTrace,
+    streaming_export_selection::{
+        StreamingExportDocument,
+        StreamingExportSelection,
+    },
     subscription::{
         Subscription,
         SubscriptionsClient,
         SubscriptionsWorker,
     },
-    system_tables::ErasedSystemIndex,
+    system_tables::{
+        ErasedSystemIndex,
+        SystemTable,
+    },
     table_registry::TableRegistry,
     table_summary::{
         self,
@@ -207,10 +214,13 @@ use crate::{
     },
     BootstrapComponentsModel,
     ComponentRegistry,
+    ComponentsTable,
     FollowerRetentionManager,
+    SchemasTable,
     TableIterator,
     Transaction,
     TransactionReadSet,
+    TransactionTextSnapshot,
     COMPONENTS_TABLE,
     SCHEMAS_TABLE,
 };
@@ -317,7 +327,7 @@ pub struct DocumentDeltas {
         DeveloperDocumentId,
         ComponentPath,
         TableName,
-        Option<ResolvedDocument>,
+        Option<StreamingExportDocument>,
     )>,
     /// Exclusive cursor timestamp to pass in to the next call to
     /// document_deltas.
@@ -328,7 +338,7 @@ pub struct DocumentDeltas {
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct SnapshotPage {
-    pub documents: Vec<(Timestamp, ComponentPath, TableName, ResolvedDocument)>,
+    pub documents: Vec<(Timestamp, ComponentPath, TableName, StreamingExportDocument)>,
     pub snapshot: Timestamp,
     pub cursor: Option<ResolvedDocumentId>,
     pub has_more: bool,
@@ -354,11 +364,14 @@ impl<RT: Runtime> DatabaseSnapshot<RT> {
             .ok_or_else(|| anyhow::anyhow!("no documents -- cannot load uninitialized database"))
     }
 
-    async fn load_raw_table_documents(
+    #[fastrace::trace]
+    async fn load_raw_and_parsed_table_documents<
+        D: TryFrom<ConvexObject, Error = anyhow::Error>,
+    >(
         persistence_snapshot: &PersistenceSnapshot,
         index_id: IndexId,
         tablet_id: TabletId,
-    ) -> anyhow::Result<BTreeMap<ResolvedDocumentId, (Timestamp, ResolvedDocument)>> {
+    ) -> anyhow::Result<(Vec<(Timestamp, PackedDocument)>, Vec<ParsedDocument<D>>)> {
         persistence_snapshot
             .index_scan(
                 index_id,
@@ -367,21 +380,34 @@ impl<RT: Runtime> DatabaseSnapshot<RT> {
                 Order::Asc,
                 usize::MAX,
             )
-            .map_ok(|(_, rev)| (rev.value.id(), (rev.ts, rev.value)))
+            .map(|row| {
+                let rev = row?.1;
+                let doc = PackedDocument::pack(&rev.value);
+                let parsed = rev.value.parse()?;
+                Ok(((rev.ts, doc), parsed))
+            })
             .try_collect()
             .await
     }
 
-    #[fastrace::trace]
-    async fn load_table_documents<D: TryFrom<ConvexObject, Error = anyhow::Error>>(
-        persistence_snapshot: &PersistenceSnapshot,
-        index_id: IndexId,
-        tablet_id: TabletId,
-    ) -> anyhow::Result<Vec<ParsedDocument<D>>> {
-        Self::load_raw_table_documents(persistence_snapshot, index_id, tablet_id)
-            .await?
-            .into_values()
-            .map(|(_, doc)| doc.parse())
+    fn load_table_documents<T: SystemTable>(
+        in_memory_indexes: &BackendInMemoryIndexes,
+        table_mapping: &TableMapping,
+        index_registry: &IndexRegistry,
+        namespace: TableNamespace,
+    ) -> anyhow::Result<Vec<ParsedDocument<T::Metadata>>>
+    where
+        T::Metadata: Send + Sync + Clone,
+        for<'a> &'a PackedDocument: ParseDocument<T::Metadata>,
+    {
+        let tablet_id =
+            table_mapping.namespace(namespace).name_to_tablet()(T::table_name().clone())?;
+        let by_id = index_registry.must_get_by_id(tablet_id)?.id;
+        let docs = in_memory_indexes
+            .range(by_id, &Interval::all(), Order::Asc)?
+            .with_context(|| format!("table {} is not in-memory?", T::table_name()))?;
+        docs.into_iter()
+            .map(|doc| doc.2.force().map(Arc::unwrap_or_clone))
             .try_collect()
     }
 
@@ -421,7 +447,8 @@ impl<RT: Runtime> DatabaseSnapshot<RT> {
         TableMapping,
         OrdMap<TabletId, TableState>,
         IndexRegistry,
-        BTreeMap<ResolvedDocumentId, (Timestamp, PackedDocument)>,
+        Vec<(Timestamp, PackedDocument)>,
+        Vec<(Timestamp, PackedDocument)>,
         BootstrapMetadata,
     )> {
         let _timer = metrics::load_table_and_index_metadata_timer();
@@ -433,31 +460,32 @@ impl<RT: Runtime> DatabaseSnapshot<RT> {
             index_tablet_id,
         }: BootstrapMetadata = bootstrap_metadata;
 
-        let index_documents: BTreeMap<_, _> =
-            Self::load_raw_table_documents(persistence_snapshot, index_by_id, index_tablet_id)
-                .await?
-                .into_iter()
-                .map(|(id, (ts, doc))| (id, (ts, PackedDocument::pack(&doc))))
-                .collect();
-        let table_documents = Self::load_table_documents::<TableMetadata>(
+        let (index_documents, parsed_index_documents) = Self::load_raw_and_parsed_table_documents(
+            persistence_snapshot,
+            index_by_id,
+            index_tablet_id,
+        )
+        .await?;
+        let (table_documents, parsed_table_documents) = Self::load_raw_and_parsed_table_documents(
             persistence_snapshot,
             tables_by_id,
             tables_tablet_id,
         )
         .await?;
 
-        let (table_mapping, table_states) = Self::table_mapping_and_states(table_documents);
+        let (table_mapping, table_states) = Self::table_mapping_and_states(parsed_table_documents);
 
         let persistence_version = persistence_snapshot.persistence().version();
         let index_registry = IndexRegistry::bootstrap(
             &table_mapping,
-            index_documents.values().map(|(_, d)| d.clone()),
+            parsed_index_documents.into_iter(),
             persistence_version,
         )?;
         Ok((
             table_mapping,
             table_states,
             index_registry,
+            table_documents,
             index_documents,
             bootstrap_metadata,
         ))
@@ -487,6 +515,113 @@ impl<RT: Runtime> DatabaseSnapshot<RT> {
             self.retention_validator.clone(),
             1000,
         )
+    }
+
+    #[fastrace::trace]
+    pub fn get_document_and_index_storage(
+        &self,
+        identity: &Identity,
+    ) -> anyhow::Result<TablesUsage<(ComponentPath, TableName)>> {
+        if !(identity.is_admin() || identity.is_system()) {
+            anyhow::bail!(unauthorized_error("get_user_document_storage"));
+        }
+
+        let documents_and_index_storage = self.snapshot.get_document_and_index_storage()?;
+        let mut remapped_documents_and_index_storage = BTreeMap::new();
+
+        for ((table_namespace, table_name), usage) in documents_and_index_storage.0 {
+            if let Some(component_path) = self.snapshot.component_registry.get_component_path(
+                ComponentId::from(table_namespace),
+                &mut TransactionReadSet::new(),
+            ) {
+                remapped_documents_and_index_storage.insert((component_path, table_name), usage);
+            } else if !table_name.is_system() {
+                // If there is no component path for this table namespace, this must be an empty
+                // user table left over from incomplete components push.
+                // System tables may be created earlier (e.g. `_schemas`), so they may be
+                // legitimately nonempty in that case.
+                anyhow::ensure!(
+                    usage.document_size == 0 && usage.index_size == 0,
+                    "Table {table_name} is in an orphaned TableNamespace without a component, but \
+                     has document size {} and index size {}",
+                    usage.document_size,
+                    usage.index_size
+                );
+            }
+        }
+        Ok(TablesUsage(remapped_documents_and_index_storage))
+    }
+
+    #[fastrace::trace]
+    pub fn get_vector_index_storage(
+        &self,
+        identity: &Identity,
+    ) -> anyhow::Result<BTreeMap<(ComponentPath, TableName), u64>> {
+        if !(identity.is_admin() || identity.is_system()) {
+            anyhow::bail!(unauthorized_error("get_vector_index_storage"));
+        }
+        let table_mapping = &self.snapshot.table_registry.table_mapping();
+        let index_registry = &self.snapshot.index_registry;
+        let mut vector_index_storage = BTreeMap::new();
+        for index in index_registry.all_vector_indexes().into_iter() {
+            let (_, value) = index.into_id_and_value();
+            let tablet_id = *value.name.table();
+            let table_namespace = table_mapping.tablet_namespace(tablet_id)?;
+            let component_id = ComponentId::from(table_namespace);
+            let table_name = table_mapping.tablet_name(tablet_id)?;
+            let size = value.config.estimate_pricing_size_bytes()?;
+            if let Some(component_path) = self
+                .snapshot
+                .component_registry
+                .get_component_path(component_id, &mut TransactionReadSet::new())
+            {
+                vector_index_storage
+                    .entry((component_path, table_name))
+                    .and_modify(|sum| *sum += size)
+                    .or_insert(size);
+            } else {
+                // If there is no component path for this table namespace, this must be an empty
+                // user table left over from incomplete components push
+                anyhow::ensure!(
+                    size == 0,
+                    "Table {table_name} is in an orphaned TableNamespace without a component, but \
+                     has non-zero vector index size {size}",
+                );
+            }
+        }
+        Ok(vector_index_storage)
+    }
+
+    /// Counts the number of documents in each table, including system tables.
+    #[fastrace::trace]
+    pub fn get_document_counts(
+        &self,
+        identity: &Identity,
+    ) -> anyhow::Result<Vec<(ComponentPath, TableName, u64)>> {
+        if !(identity.is_admin() || identity.is_system()) {
+            anyhow::bail!(unauthorized_error("get_document_counts"));
+        }
+        let mut document_counts = vec![];
+        for ((table_namespace, table_name), summary) in self.snapshot.iter_table_summaries()? {
+            let count = summary.num_values();
+            if let Some(component_path) = self.snapshot.component_registry.get_component_path(
+                ComponentId::from(table_namespace),
+                &mut TransactionReadSet::new(),
+            ) {
+                document_counts.push((component_path, table_name, count));
+            } else if !table_name.is_system() {
+                // If there is no component path for this table namespace, this must be an empty
+                // user table left over from incomplete components push.
+                // System tables may be created earlier (e.g. `_schemas`), so they may be
+                // legitimately nonempty in that case.
+                anyhow::ensure!(
+                    count == 0,
+                    "Table {table_name} is in an orphaned TableNamespace without a component, but \
+                     has document count {count}",
+                );
+            }
+        }
+        Ok(document_counts)
     }
 
     pub async fn full_table_scan(
@@ -568,14 +703,30 @@ impl<RT: Runtime> DatabaseSnapshot<RT> {
 
         // Step 1: Fetch tables and indexes from persistence.
         tracing::info!("Bootstrapping indexes...");
-        let (table_mapping, table_states, index_registry, index_documents, bootstrap_metadata) =
-            Self::load_table_and_index_metadata(&persistence_snapshot).await?;
+        let (
+            table_mapping,
+            table_states,
+            index_registry,
+            table_documents,
+            index_documents,
+            bootstrap_metadata,
+        ) = Self::load_table_and_index_metadata(&persistence_snapshot).await?;
 
         // Step 2: Load bootstrap tables indexes into memory.
         let load_indexes_into_memory_timer = load_indexes_into_memory_timer();
         let in_memory_indexes = {
             let mut index =
                 BackendInMemoryIndexes::bootstrap(&index_registry, index_documents, *snapshot)?;
+            // Since we already loaded the `TablesTable` from persistence, feed
+            // the documents from memory instead of re-fetching them.
+            index.load_table(
+                &index_registry,
+                bootstrap_metadata.tables_tablet_id,
+                table_documents,
+                *snapshot,
+                persistence.version(),
+            );
+            // Then fetch the remaining in-memory tables.
             index
                 .load_enabled_for_tables(
                     &index_registry,
@@ -606,30 +757,23 @@ impl<RT: Runtime> DatabaseSnapshot<RT> {
 
         let mut schema_docs = BTreeMap::new();
         for namespace in table_mapping.namespaces_for_name(&SCHEMAS_TABLE) {
-            let schema_tablet =
-                table_mapping.namespace(namespace).name_to_tablet()(SCHEMAS_TABLE.clone())?;
-            let by_id = index_registry.must_get_by_id(schema_tablet)?.id;
-            let schema_documents = Self::load_table_documents::<SchemaMetadata>(
-                &persistence_snapshot,
-                by_id,
-                schema_tablet,
-            )
-            .await?;
+            let schema_documents = Self::load_table_documents::<SchemasTable>(
+                &in_memory_indexes,
+                &table_mapping,
+                &index_registry,
+                namespace,
+            )?;
             schema_docs.insert(namespace, schema_documents);
         }
 
         let schema_registry = SchemaRegistry::bootstrap(schema_docs);
 
-        let component_tablet = table_mapping
-            .namespace(TableNamespace::Global)
-            .name_to_tablet()(COMPONENTS_TABLE.clone())?;
-        let component_by_id = index_registry.must_get_by_id(component_tablet)?.id;
-        let component_docs = Self::load_table_documents::<ComponentMetadata>(
-            &persistence_snapshot,
-            component_by_id,
-            component_tablet,
-        )
-        .await?;
+        let component_docs = Self::load_table_documents::<ComponentsTable>(
+            &in_memory_indexes,
+            &table_mapping,
+            &index_registry,
+            TableNamespace::Global,
+        )?;
         let component_registry = ComponentRegistry::bootstrap(&table_mapping, component_docs)?;
         Ok(Self {
             runtime,
@@ -723,28 +867,60 @@ impl<RT: Runtime> DatabaseSnapshot<RT> {
         self.snapshot.table_summaries.as_ref()
     }
 
-    pub fn get_document_and_index_storage(
+    /// Create a [`Transaction`] at the snapshot's timestamp. This allows using
+    /// read-only APIs that require a Transaction without needing a `Database`.
+    ///
+    /// The transaction will not use any in-memory index cache, so this should
+    /// not be used to serve any frequently called APIs.
+    pub fn begin_tx(
         &self,
-    ) -> anyhow::Result<TablesUsage<(TableNamespace, TableName)>> {
-        self.snapshot.get_document_and_index_storage()
+        identity: Identity,
+        text_index_snapshot: Arc<dyn TransactionTextSnapshot>,
+        usage_tracker: FunctionUsageTracker,
+        virtual_system_mapping: VirtualSystemMapping,
+    ) -> anyhow::Result<Transaction<RT>> {
+        let database_index_snapshot = DatabaseIndexSnapshot::new(
+            self.snapshot.index_registry.clone(),
+            Arc::new(NoInMemoryIndexes),
+            self.snapshot.table_registry.table_mapping().clone(),
+            self.persistence_snapshot.clone(),
+        );
+
+        let id_generator = TransactionIdGenerator::new(&self.runtime.clone())?;
+        let creation_time =
+            CreationTime::try_from(cmp::max(*self.ts, self.runtime.generate_timestamp()?))?;
+        let transaction_index = TransactionIndex::new(
+            self.snapshot.index_registry.clone(),
+            database_index_snapshot,
+            text_index_snapshot,
+        );
+        Ok(Transaction::new(
+            identity,
+            id_generator,
+            creation_time,
+            transaction_index,
+            self.snapshot.table_registry.clone(),
+            self.snapshot.schema_registry.clone(),
+            self.snapshot.component_registry.clone(),
+            Arc::new(self.snapshot.table_summaries.clone()),
+            self.runtime.clone(),
+            usage_tracker,
+            self.retention_validator.clone(),
+            virtual_system_mapping,
+        ))
     }
 }
 
-#[derive(Clone)]
-pub struct StreamingExportTableFilter {
-    pub table_name: Option<TableName>,
-    pub component_path: Option<ComponentPath>,
-    pub namespace: Option<TableNamespace>,
+pub struct StreamingExportFilter {
+    pub selection: StreamingExportSelection,
     pub include_hidden: bool,
     pub include_system: bool,
 }
 
-impl Default for StreamingExportTableFilter {
+impl Default for StreamingExportFilter {
     fn default() -> Self {
         Self {
-            table_name: None,
-            namespace: None,
-            component_path: None,
+            selection: StreamingExportSelection::default(),
             // Allow snapshot imports to be streamed by default.
             // Note this behavior is kind of odd for `--require-empty` imports
             // because the rows are streamed before they are committed to Convex,
@@ -765,6 +941,7 @@ impl<RT: Runtime> Database<RT> {
         shutdown: ShutdownSignal,
         virtual_system_mapping: VirtualSystemMapping,
         usage_events: Arc<dyn UsageEventLogger>,
+        retention_rate_limiter: Arc<RateLimiter<RT>>,
     ) -> anyhow::Result<Self> {
         let _load_database_timer = metrics::load_database_timer();
 
@@ -820,6 +997,7 @@ impl<RT: Runtime> Database<RT> {
             snapshot_reader.clone(),
             follower_retention_manager,
             shutdown.clone(),
+            retention_rate_limiter,
         )
         .await?;
 
@@ -1223,11 +1401,11 @@ impl<RT: Runtime> Database<RT> {
         let index_documents = document_writes
             .iter()
             .filter(|(id, _)| id.tablet_id == index_table_id.tablet_id)
-            .map(|(id, doc)| (*id, (ts, PackedDocument::pack(doc))))
-            .collect::<BTreeMap<_, _>>();
+            .map(|(_, doc)| (ts, PackedDocument::pack(doc)))
+            .collect::<Vec<_>>();
         let mut index_registry = IndexRegistry::bootstrap(
             &table_mapping,
-            index_documents.values().map(|(_, d)| d.clone()),
+            index_documents.iter().map(|(_, d)| d.clone()),
             persistence.reader().version(),
         )?;
         let mut in_memory_indexes =
@@ -1254,7 +1432,7 @@ impl<RT: Runtime> Database<RT> {
             .collect();
         let index_writes = index_writes
             .into_iter()
-            .map(|update| (ts, update))
+            .map(|update| PersistenceIndexEntry::from_index_update(ts, update))
             .collect();
 
         // Write _tables.by_id and _index.by_id to persistence globals for
@@ -1524,6 +1702,21 @@ impl<RT: Runtime> Database<RT> {
         Ok(snapshot)
     }
 
+    pub fn latest_database_snapshot(&self) -> anyhow::Result<DatabaseSnapshot<RT>> {
+        let (ts, snapshot) = self.snapshot_manager.lock().latest();
+        let repeatable_persistence =
+            RepeatablePersistence::new(self.reader.clone(), ts, self.retention_validator());
+        Ok(DatabaseSnapshot {
+            runtime: self.runtime.clone(),
+            ts,
+            bootstrap_metadata: self.bootstrap_metadata.clone(),
+            snapshot,
+            persistence_snapshot: repeatable_persistence.read_snapshot(ts)?,
+            persistence_reader: self.reader.clone(),
+            retention_validator: self.retention_validator(),
+        })
+    }
+
     #[cfg(any(test, feature = "testing"))]
     pub async fn commit(&self, transaction: Transaction<RT>) -> anyhow::Result<Timestamp> {
         self.commit_with_write_source(transaction, WriteSource::unknown())
@@ -1571,48 +1764,33 @@ impl<RT: Runtime> Database<RT> {
     }
 
     fn streaming_export_table_filter(
-        table_filter: &StreamingExportTableFilter,
+        filter: &StreamingExportFilter,
         tablet_id: TabletId,
         table_mapping: &TableMapping,
         component_paths: &BTreeMap<ComponentId, ComponentPath>,
-    ) -> bool {
+    ) -> anyhow::Result<bool> {
         if !table_mapping.id_exists(tablet_id) {
             // Always exclude deleted tablets.
-            return false;
+            return Ok(false);
         }
-        if !table_filter.include_system && table_mapping.is_system_tablet(tablet_id) {
-            return false;
+        if !filter.include_system && table_mapping.is_system_tablet(tablet_id) {
+            return Ok(false);
         }
-        if !table_filter.include_hidden && !table_mapping.is_active(tablet_id) {
-            return false;
+        if !filter.include_hidden && !table_mapping.is_active(tablet_id) {
+            return Ok(false);
         }
-        if let Some(namespace_filter) = table_filter.namespace
-            && !table_mapping
-                .tablet_namespace(tablet_id)
-                .is_ok_and(|namespace| namespace == namespace_filter)
-        {
-            return false;
-        }
-        if let Some(table_name_filter) = &table_filter.table_name
-            && !table_mapping
-                .tablet_name(tablet_id)
-                .is_ok_and(|table_name| table_name == *table_name_filter)
-        {
-            return false;
-        }
-        if let Some(component_path_filter) = &table_filter.component_path {
-            if !table_mapping
-                .tablet_namespace(tablet_id)
-                .is_ok_and(|namespace| {
-                    component_paths
-                        .get(&namespace.into())
-                        .is_some_and(|component_path| component_path == component_path_filter)
-                })
-            {
-                return false;
-            }
-        }
-        true
+
+        let (table_namespace, _, table_name) = table_mapping
+            .get_table_metadata(tablet_id)
+            .with_context(|| format!("Can’t find the table entry for the tablet id {tablet_id}"))?;
+        let component_path = component_paths
+            .get(&ComponentId::from(*table_namespace))
+            .with_context(|| {
+                format!("Can’t find the component path for table namespace {table_namespace:?}")
+            })?;
+        Ok(filter
+            .selection
+            .is_table_included(component_path, table_name))
     }
 
     #[fastrace::trace]
@@ -1620,7 +1798,7 @@ impl<RT: Runtime> Database<RT> {
         &self,
         identity: Identity,
         cursor: Option<Timestamp>,
-        filter: StreamingExportTableFilter,
+        filter: StreamingExportFilter,
         rows_read_limit: usize,
         rows_returned_limit: usize,
     ) -> anyhow::Result<DocumentDeltas> {
@@ -1691,7 +1869,7 @@ impl<RT: Runtime> Database<RT> {
                 id.table(),
                 &table_mapping,
                 &component_paths,
-            ) {
+            )? {
                 let table_number = table_mapping.tablet_number(id.table())?;
                 let table_name = table_mapping.tablet_name(id.table())?;
                 let component_id = ComponentId::from(table_mapping.tablet_namespace(id.table())?);
@@ -1705,7 +1883,18 @@ impl<RT: Runtime> Database<RT> {
                     .cloned()
                     .unwrap_or_else(ComponentPath::root);
                 let id = DeveloperDocumentId::new(table_number, id.internal_id());
-                deltas.push((ts, id, component_path, table_name, maybe_doc));
+                let column_filter = filter
+                    .selection
+                    .column_filter(&component_path, &table_name)?;
+                deltas.push((
+                    ts,
+                    id,
+                    component_path,
+                    table_name,
+                    maybe_doc
+                        .map(|doc| column_filter.filter_document(doc.to_developer()))
+                        .transpose()?,
+                ));
                 if new_cursor.is_none() && deltas.len() >= rows_returned_limit {
                     // We want to finish, but we have to process all documents at this timestamp.
                     new_cursor = Some(ts);
@@ -1728,7 +1917,7 @@ impl<RT: Runtime> Database<RT> {
         identity: Identity,
         snapshot: Option<Timestamp>,
         cursor: Option<ResolvedDocumentId>,
-        table_filter: StreamingExportTableFilter,
+        filter: StreamingExportFilter,
         rows_read_limit: usize,
         rows_returned_limit: usize,
     ) -> anyhow::Result<SnapshotPage> {
@@ -1763,18 +1952,27 @@ impl<RT: Runtime> Database<RT> {
         let tablet_ids: BTreeSet<_> = table_mapping
             .iter()
             .map(|(tablet_id, ..)| tablet_id)
-            .filter(|tablet_id| {
-                Self::streaming_export_table_filter(
-                    &table_filter,
-                    *tablet_id,
+            .filter_map(|tablet_id| {
+                let has_table_already_been_treated = cursor
+                    .as_ref()
+                    .map(|c| tablet_id < c.tablet_id)
+                    .unwrap_or(false);
+                if has_table_already_been_treated {
+                    return None;
+                }
+
+                match Self::streaming_export_table_filter(
+                    &filter,
+                    tablet_id,
                     &table_mapping,
                     &component_paths,
-                ) && cursor
-                    .as_ref()
-                    .map(|c| *tablet_id >= c.tablet_id)
-                    .unwrap_or(true)
+                ) {
+                    Ok(true) => Some(Ok(tablet_id)),
+                    Ok(false) => None,
+                    Err(e) => Some(Err(e)),
+                }
             })
-            .collect();
+            .try_collect()?;
         let mut tablet_ids = tablet_ids.into_iter();
         let tablet_id = match tablet_ids.next() {
             Some(first_table) => first_table,
@@ -1826,7 +2024,16 @@ impl<RT: Runtime> Database<RT> {
                 .get(&component_id)
                 .cloned()
                 .unwrap_or_else(ComponentPath::root);
-            documents.push((ts, component_path, table_name, doc));
+            let column_filter = filter
+                .selection
+                .column_filter(&component_path, &table_name)?;
+
+            documents.push((
+                ts,
+                component_path,
+                table_name,
+                column_filter.filter_document(doc.to_developer())?,
+            ));
             if rows_read >= rows_read_limit || documents.len() >= rows_returned_limit {
                 new_cursor = Some(id);
                 break;
@@ -1882,14 +2089,14 @@ impl<RT: Runtime> Database<RT> {
             .collect())
     }
 
-    /// Attempt to pull a token forward to a given timestamp, returning `None`
+    /// Attempt to pull a token forward to a given timestamp, returning `Err`
     /// if there have been overlapping writes between the token's original
     /// timestamp and `ts`.
     pub async fn refresh_token(
         &self,
         token: Token,
         ts: Timestamp,
-    ) -> anyhow::Result<Option<Token>> {
+    ) -> anyhow::Result<Result<Token, Option<Timestamp>>> {
         let _timer = metrics::refresh_token_timer();
         self.log.refresh_token(token, ts)
     }
@@ -1904,117 +2111,12 @@ impl<RT: Runtime> Database<RT> {
         Ok(())
     }
 
-    pub async fn get_vector_index_storage(
-        &self,
-        identity: Identity,
-    ) -> anyhow::Result<BTreeMap<(ComponentPath, TableName), u64>> {
-        if !(identity.is_admin() || identity.is_system()) {
-            anyhow::bail!(unauthorized_error("get_vector_index_storage"));
-        }
-        let mut tx = self.begin(identity).await?;
-        let ts = *tx.begin_timestamp();
-        let mut components_model = BootstrapComponentsModel::new(&mut tx);
-        let snapshot = self.snapshot_manager.lock().snapshot(ts)?;
-        let table_mapping = snapshot.table_registry.table_mapping().clone();
-        let index_registry = snapshot.index_registry;
-        let mut vector_index_storage = BTreeMap::new();
-        for index in index_registry.all_vector_indexes().into_iter() {
-            let (_, value) = index.into_id_and_value();
-            let tablet_id = *value.name.table();
-            let table_namespace = table_mapping.tablet_namespace(tablet_id)?;
-            let component_id = ComponentId::from(table_namespace);
-            let table_name = table_mapping.tablet_name(tablet_id)?;
-            let size = value.config.estimate_pricing_size_bytes()?;
-            if let Some(component_path) = components_model.get_component_path(component_id) {
-                vector_index_storage
-                    .entry((component_path, table_name))
-                    .and_modify(|sum| *sum += size)
-                    .or_insert(size);
-            } else {
-                // If there is no component path for this table namespace, this must be an empty
-                // user table left over from incomplete components push
-                anyhow::ensure!(
-                    size == 0,
-                    "Table {table_name} is in an orphaned TableNamespace without a component, but \
-                     has non-zero vector index size {size}",
-                );
-            }
-        }
-        Ok(vector_index_storage)
-    }
-
-    /// Counts the number of documents in each table, including system tables.
-    pub async fn get_document_counts(
-        &self,
-    ) -> anyhow::Result<Vec<(ComponentPath, TableName, u64)>> {
-        let mut tx = self.begin(Identity::system()).await?;
-        let ts = *tx.begin_timestamp();
-        let mut components_model = BootstrapComponentsModel::new(&mut tx);
-        let snapshot = self.snapshot_manager.lock().snapshot(ts)?;
-        let mut document_counts = vec![];
-        for ((table_namespace, table_name), summary) in snapshot.iter_table_summaries()? {
-            let count = summary.num_values();
-            if let Some(component_path) =
-                components_model.get_component_path(ComponentId::from(table_namespace))
-            {
-                document_counts.push((component_path, table_name, count));
-            } else if !table_name.is_system() {
-                // If there is no component path for this table namespace, this must be an empty
-                // user table left over from incomplete components push.
-                // System tables may be created earlier (e.g. `_schemas`), so they may be
-                // legitimately nonempty in that case.
-                anyhow::ensure!(
-                    count == 0,
-                    "Table {table_name} is in an orphaned TableNamespace without a component, but \
-                     has document count {count}",
-                );
-            }
-        }
-        Ok(document_counts)
-    }
-
     pub fn has_table_summaries_bootstrapped(&self) -> bool {
         self.snapshot_manager
             .lock()
             .latest_snapshot()
             .table_summaries
             .is_some()
-    }
-
-    pub async fn get_document_and_index_storage(
-        &self,
-        identity: Identity,
-    ) -> anyhow::Result<TablesUsage<(ComponentPath, TableName)>> {
-        if !(identity.is_admin() || identity.is_system()) {
-            anyhow::bail!(unauthorized_error("get_user_document_storage"));
-        }
-
-        let mut tx = self.begin(identity).await?;
-        let ts = *tx.begin_timestamp();
-        let mut components_model = BootstrapComponentsModel::new(&mut tx);
-        let snapshot = self.snapshot_manager.lock().snapshot(ts)?;
-        let documents_and_index_storage = snapshot.get_document_and_index_storage()?;
-        let mut remapped_documents_and_index_storage = BTreeMap::new();
-        for ((table_namespace, table_name), usage) in documents_and_index_storage.0 {
-            if let Some(component_path) =
-                components_model.get_component_path(ComponentId::from(table_namespace))
-            {
-                remapped_documents_and_index_storage.insert((component_path, table_name), usage);
-            } else if !table_name.is_system() {
-                // If there is no component path for this table namespace, this must be an empty
-                // user table left over from incomplete components push.
-                // System tables may be created earlier (e.g. `_schemas`), so they may be
-                // legitimately nonempty in that case.
-                anyhow::ensure!(
-                    usage.document_size == 0 && usage.index_size == 0,
-                    "Table {table_name} is in an orphaned TableNamespace without a component, but \
-                     has document size {} and index size {}",
-                    usage.document_size,
-                    usage.index_size
-                );
-            }
-        }
-        Ok(TablesUsage(remapped_documents_and_index_storage))
     }
 
     pub fn usage_counter(&self) -> UsageCounter {
@@ -2182,18 +2284,20 @@ fn occ_write_source_string(
     let preamble = if is_same_write_source {
         "Another call to this mutation".to_string()
     } else {
-        format!("A call to \"{}\"", source)
+        format!("A call to \"{source}\"")
     };
-    format!(
-        "{preamble} changed the document with ID \"{}\"",
-        document_id
-    )
+    format!("{preamble} changed the document with ID \"{document_id}\"")
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ConflictingReadWithWriteSource {
     pub(crate) read: ConflictingRead,
     pub(crate) write_source: WriteSource,
+    /// The timestamp of the conflicting write.
+    ///
+    /// N.B.: this may be a non-repeatable timestamp, if this conflict occurred
+    /// against a pending write!
+    pub(crate) write_ts: Timestamp,
 }
 
 impl ConflictingReadWithWriteSource {
@@ -2224,7 +2328,7 @@ impl ConflictingReadWithWriteSource {
         }
 
         let msg = occ_msg
-            .map(|write_source| format!("{}.\n", write_source))
+            .map(|write_source| format!("{write_source}.\n"))
             .unwrap_or_default();
         let index = format!("{table_name}.{}", self.read.index.descriptor());
         let msg = format!(

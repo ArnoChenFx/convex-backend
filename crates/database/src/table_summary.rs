@@ -400,8 +400,10 @@ pub enum BootstrapKind {
 }
 
 pub fn table_summary_bootstrapping_error(msg: Option<&'static str>) -> anyhow::Error {
-    anyhow::anyhow!(msg.unwrap_or("Table summary unavailable (still bootstrapping)"))
-        .context(ErrorMetadata::operational_internal_server_error())
+    anyhow::anyhow!(ErrorMetadata::feature_temporarily_unavailable(
+        "TableSummariesUnavailable",
+        msg.unwrap_or("Table summary unavailable (still bootstrapping)")
+    ))
 }
 
 /// Compute a `TableSummarySnapshot` at a given timestamp.
@@ -546,15 +548,11 @@ fn add_revision(
         }
     }
     let id = &revision_pair.id;
-    let summary = match tables.get_mut(&id.table()) {
-        Some(i) => i,
-        None => {
-            // In historical instances, some rows were created before their corresponding
-            // `_table` row.
-            tables.insert(id.table(), TableSummary::empty());
-            tables.get_mut(&id.table()).unwrap()
-        },
-    };
+    let summary = tables.entry(id.table()).or_insert_with(
+        // In historical instances, some rows were created before their corresponding
+        // `_table` row.
+        TableSummary::empty,
+    );
     if let Some(old_document) = revision_pair.prev_document() {
         *summary = summary.remove(old_document.value())?;
     }

@@ -4,19 +4,20 @@ import {
   deploymentFetch,
   logAndHandleFetchError,
 } from "./utils/utils.js";
+import { Context } from "../../bundler/context.js";
 import {
   logFailure,
-  Context,
   showSpinner,
   logFinishedStep,
   logError,
   stopSpinner,
   changeSpinner,
-} from "../../bundler/context.js";
+} from "../../bundler/log.js";
 import { subscribe } from "./run.js";
 import { nodeFs } from "../../bundler/fs.js";
 import path from "path";
 import { Readable } from "stream";
+import { stringifyValueForError } from "../../values/value.js";
 
 export async function exportFromDeployment(
   ctx: Context,
@@ -38,7 +39,7 @@ export async function exportFromDeployment(
     snapshotExportDashboardLink,
   } = options;
 
-  showSpinner(ctx, `Creating snapshot export${deploymentNotice}`);
+  showSpinner(`Creating snapshot export${deploymentNotice}`);
 
   const snapshotExportState = await startSnapshotExport(ctx, {
     includeStorage,
@@ -49,14 +50,12 @@ export async function exportFromDeployment(
 
   switch (snapshotExportState.state) {
     case "completed":
-      stopSpinner(ctx);
+      stopSpinner();
       logFinishedStep(
-        ctx,
         `Created snapshot export at timestamp ${snapshotExportState.start_ts}`,
       );
       if (snapshotExportDashboardLink !== undefined) {
         logFinishedStep(
-          ctx,
           `Export is available at ${snapshotExportDashboardLink}`,
         );
       }
@@ -69,31 +68,39 @@ export async function exportFromDeployment(
         printedMessage: `WARNING: Export is continuing to run on the server.`,
       });
     }
-    default: {
-      const _: never = snapshotExportState;
+    case "failed": {
       return await ctx.crash({
         exitCode: 1,
         errorType: "fatal",
-        printedMessage: `unknown error: unexpected state ${snapshotExportState as any}`,
+        printedMessage: `Export failed. Please try again later or contact support@convex.dev for help.`,
+      });
+    }
+    default: {
+      snapshotExportState satisfies never;
+      return await ctx.crash({
+        exitCode: 1,
+        errorType: "fatal",
+        printedMessage: `unknown error: unexpected state ${stringifyValueForError(snapshotExportState as any)}`,
         errForSentry: `unexpected snapshot export state ${(snapshotExportState as any).state}`,
       });
     }
   }
 
-  showSpinner(ctx, `Downloading snapshot export to ${chalk.bold(inputPath)}`);
+  showSpinner(`Downloading snapshot export to ${chalk.bold(inputPath)}`);
   const { filePath } = await downloadSnapshotExport(ctx, {
     snapshotExportTs: snapshotExportState.start_ts,
     inputPath,
     adminKey,
     deploymentUrl,
   });
-  stopSpinner(ctx);
-  logFinishedStep(ctx, `Downloaded snapshot export to ${chalk.bold(filePath)}`);
+  stopSpinner();
+  logFinishedStep(`Downloaded snapshot export to ${chalk.bold(filePath)}`);
 }
 
 type SnapshotExportState =
   | { state: "requested" }
   | { state: "in_progress" }
+  | { state: "failed" }
   | {
       state: "completed";
       complete_ts: bigint;
@@ -126,10 +133,11 @@ async function waitForStableExportState(
             // Not a stable state.
             break;
           case "completed":
+          case "failed":
             onDone();
             break;
           default: {
-            const _: never = snapshotExportState;
+            snapshotExportState satisfies never;
             onDone();
           }
         }
@@ -218,7 +226,7 @@ export async function downloadSnapshotExport(
   } else {
     filePath = inputPath;
   }
-  changeSpinner(ctx, `Downloading snapshot export to ${chalk.bold(filePath)}`);
+  changeSpinner(`Downloading snapshot export to ${chalk.bold(filePath)}`);
 
   try {
     await nodeFs.writeFileStream(
@@ -226,8 +234,8 @@ export async function downloadSnapshotExport(
       Readable.fromWeb(response.body! as any),
     );
   } catch (e) {
-    logFailure(ctx, `Exporting data failed`);
-    logError(ctx, chalk.red(e));
+    logFailure(`Exporting data failed`);
+    logError(chalk.red(e));
     return await ctx.crash({
       exitCode: 1,
       errorType: "fatal",
