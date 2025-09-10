@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useState } from "react";
+import React, { useContext, useEffect, useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import udfs from "@common/udfs";
 import { SidebarDetailLayout } from "@common/layouts/SidebarDetailLayout";
@@ -20,14 +20,16 @@ import { useTableShapes } from "@common/lib/deploymentApi";
 import { Modal } from "@ui/Modal";
 import { LoadingTransition } from "@ui/Loading";
 import { DeploymentPageTitle } from "@common/elements/DeploymentPageTitle";
-import { Callout } from "@ui/Callout";
+import { useRouter } from "next/router";
+import omit from "lodash/omit";
 
 export function DataView() {
   const { useCurrentDeployment } = useContext(DeploymentInfoContext);
-  const { id: deploymentId, kind } = useCurrentDeployment() ?? {
+  const { id: deploymentId } = useCurrentDeployment() ?? {
     id: undefined,
     kind: undefined,
   };
+  const router = useRouter();
   const tableMetadata = useTableMetadataAndUpdateURL();
 
   const componentId = useNents().selectedNent?.id;
@@ -56,7 +58,6 @@ export function DataView() {
   }, [schemas]);
 
   const { tables, hadError } = useTableShapes();
-  const { ErrorBoundary } = useContext(DeploymentInfoContext);
 
   const [isShowingSchema, setIsShowingSchema] = useState(false);
   const showSchemaProps = useMemo(
@@ -69,6 +70,20 @@ export function DataView() {
           },
     [activeSchema, inProgressSchema, setIsShowingSchema],
   );
+
+  useEffect(() => {
+    if (router.query.showSchema === "true") {
+      setIsShowingSchema(true);
+      void router.push(
+        {
+          pathname: router.pathname,
+          query: omit(router.query, "showSchema"),
+        },
+        undefined,
+        { shallow: true },
+      );
+    }
+  }, [router.query.showSchema, router]);
 
   return (
     <>
@@ -125,46 +140,15 @@ export function DataView() {
                   loadingProps={{ shimmer: false }}
                 >
                   {activeSchema !== undefined && (
-                    <ErrorBoundary
-                      fallback={({ error }) => {
-                        // Old versions of local deployments don't have the frontend/indexes.js system UDF that now reads indexes.
-                        // We force folks to upgrade their local deployment to avoid supporting multiple codepaths for reading indexes.
-                        if (
-                          error.message.includes(
-                            "Couldn't find system module '\"frontend/indexes.js\"",
-                          ) &&
-                          kind === "local"
-                        ) {
-                          return (
-                            <div className="h-full grow">
-                              <div className="flex h-full flex-col items-center justify-center">
-                                <Callout
-                                  variant="error"
-                                  className="max-w-prose"
-                                >
-                                  <span>
-                                    Your local deployment is out of date. Please
-                                    restart it with <code>npx convex dev</code>{" "}
-                                    and upgrade.
-                                  </span>
-                                </Callout>
-                              </div>
-                            </div>
-                          );
-                        }
-                        throw error;
-                      }}
-                    >
-                      <DataContent
-                        key={tableMetadata.name}
-                        tableName={tableMetadata.name}
-                        componentId={componentId ?? null}
-                        shape={
-                          tableMetadata.tables.get(tableMetadata.name) ?? null
-                        }
-                        activeSchema={activeSchema}
-                      />
-                    </ErrorBoundary>
+                    <DataContent
+                      key={tableMetadata.name}
+                      tableName={tableMetadata.name}
+                      componentId={componentId ?? null}
+                      shape={
+                        tableMetadata.tables.get(tableMetadata.name) ?? null
+                      }
+                      activeSchema={activeSchema}
+                    />
                   )}
                 </LoadingTransition>
               )
