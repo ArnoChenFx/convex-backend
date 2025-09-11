@@ -2,7 +2,7 @@ import * as base64 from "js-base64";
 import { ReactNode } from "react";
 import { toast as sonnerToast } from "sonner";
 import * as IdEncoding from "id-encoding";
-import { DatabaseFilterExpression } from "system-udfs/convex/_system/frontend/lib/filters";
+import { FilterExpression } from "system-udfs/convex/_system/frontend/lib/filters";
 
 export function dismissToast(id: string) {
   sonnerToast.dismiss(id);
@@ -80,21 +80,59 @@ export function getReferencedTableName(
   return tableMapping[tableNumber] ?? null;
 }
 
+/**
+ * System tables _file_storage and _scheduled_jobs have a different name
+ * in user-facing contexts.
+ */
+export function getVisibleTableName(tableName: string) {
+  if (tableName === "_file_storage") {
+    return "_storage";
+  }
+
+  if (tableName === "_scheduled_jobs") {
+    return "_scheduled_functions";
+  }
+
+  return tableName;
+}
+
 export function documentHref({
   deploymentsURI,
   tableName,
   id,
   componentId,
+  captureMessage,
 }: {
   deploymentsURI: string;
   tableName: string;
   id: string;
   componentId: string | null;
+  captureMessage: (message: string) => void;
 }): {
   pathname: string;
   query: { [key: string]: string };
 } {
-  const filter: DatabaseFilterExpression = {
+  if (tableName === "_scheduled_jobs") {
+    return {
+      pathname: `${deploymentsURI}/schedules/functions`,
+      query: {
+        // FIXME: This could include query parameters one day to link to a specific job
+      },
+    };
+  }
+
+  if (tableName === "_file_storage") {
+    return {
+      pathname: `${deploymentsURI}/files`,
+      query: { id },
+    };
+  }
+
+  if (tableName.startsWith("_")) {
+    captureMessage(`Linking to an unsupported system table: ${tableName}`);
+  }
+
+  const filter: FilterExpression = {
     clauses: [
       {
         id: "0",
@@ -104,7 +142,6 @@ export function documentHref({
       },
     ],
   };
-
   return {
     pathname: `${deploymentsURI}/data`,
     query: {
